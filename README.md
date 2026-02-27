@@ -27,27 +27,25 @@ DigiCal is a comprehensive business calculator and transaction management system
 
 ## 📸 Screenshots
 
-*(Add your own screenshots inside the `assets/screenshots/` folder and link them here to showcase the app!)*
-
 <div align="center">
   <table>
     <tr>
         <td align="center">
-        <!-- <img src="assets/screenshots/calculator.png" width="400"/> -->
+        <img src="assets/screenshots/calculator.png" width="400"/>
         <br/><b>Calculator Mode</b>
         </td>
         <td align="center">
-        <!-- <img src="assets/screenshots/sales.png" width="400"/> -->
+        <img src="assets/screenshots/sales.png" width="400"/>
         <br/><b>Sales Entry & UPI</b>
         </td>
     </tr>
     <tr>
         <td align="center">
-        <!-- <img src="assets/screenshots/analytics.png" width="400"/> -->
+        <img src="assets/screenshots/analytics.png" width="400"/>
         <br/><b>Visual Analytics</b>
         </td>
         <td align="center">
-        <!-- <img src="assets/screenshots/history.png" width="400"/> -->
+        <img src="assets/screenshots/history.png" width="400"/>
         <br/><b>Transaction History</b>
         </td>
     </tr>
