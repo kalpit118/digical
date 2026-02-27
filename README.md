@@ -4,7 +4,7 @@
   <p><em>A modern, beautiful, and feature-rich business calculator optimized for desktop and Raspberry Pi</em></p>
   
   [![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/downloads/)
-  [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+  [![License](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
 </div>
 
 <br/>
