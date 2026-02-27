@@ -389,6 +389,9 @@ class DigiCalGUI:
     def calculator_button_click(self, button):
         """Handle calculator button clicks"""
         if button in '0123456789.':
+            # If starting a fresh expression, clear leftover product names
+            if self.calculator.get_expression() in ("0", ""):
+                self._line_products = {}
             self.calculator.add_digit(button)
             self.update_display(self.calculator.get_expression())
         elif button in '+-×÷':
