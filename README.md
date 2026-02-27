@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/apps.png" alt="DigiCal Logo" width="120"/>
+  <img src="assets/logo.png" alt="DigiCal Logo" width="120"/>
   <h1>DigiCal Business Calculator</h1>
   <p><em>A modern, beautiful, and feature-rich business calculator optimized for desktop and Raspberry Pi</em></p>
   
@@ -150,5 +150,5 @@ DigiCal/
 ---
 
 <div align="center">
-  <p>Built with ❤️ using Python and Tkinter</p>
+  <p>Built with ❤️ by Kalpit</p>
 </div>
