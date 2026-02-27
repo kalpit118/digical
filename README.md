@@ -27,11 +27,6 @@ DigiCal is a comprehensive business calculator and transaction management system
 
 ## 📸 Screenshots
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 4ef73fae391bee6f48a254d3a69d287e3e85c68d
 <div align="center">
   <table>
     <tr>
