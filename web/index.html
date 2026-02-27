@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DigiCal Business Portal</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <img src="logo.png" alt="DigiCal Logo" class="logo-image">
+                    <div class="logo-text">
+                        <h1>DigiCal</h1>
+                        <p class="subtitle">Business Analytics Portal</p>
+                    </div>
+                </div>
+                <div class="header-info">
+                    <div class="info-item">
+                        <span class="label">Handler:</span>
+                        <span id="current-handler" class="value">Loading...</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Last Updated:</span>
+                        <span id="last-updated" class="value">--:--</span>
+                    </div>
+                    <div class="status-indicator" id="status-indicator">
+                        <span class="status-dot"></span>
+                        <span>Live</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="container">
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="dashboard">
+                    <span class="icon">📈</span>
+                    Dashboard
+                </button>
+                <button class="nav-tab" data-tab="transactions">
+                    <span class="icon">💰</span>
+                    Transactions
+                </button>
+                <button class="nav-tab" data-tab="handlers">
+                    <span class="icon">👥</span>
+                    Handlers
+                </button>
+                <button class="nav-tab" data-tab="analytics">
+                    <span class="icon">📊</span>
+                    Analytics
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active">
+                <!-- Summary Cards -->
+                <div class="summary-grid">
+                    <div class="card summary-card sales">
+                        <div class="card-header">
+                            <h3>Today's Sales</h3>
+                            <span class="icon">💵</span>
+                        </div>
+                        <div class="card-value" id="today-sales">₹0.00</div>
+                        <div class="card-footer">
+                            <span id="week-sales">Week: ₹0.00</span>
+                            <span id="month-sales">Month: ₹0.00</span>
+                        </div>
+                    </div>
+
+                    <div class="card summary-card expense">
+                        <div class="card-header">
+                            <h3>Today's Expenses</h3>
+                            <span class="icon">💸</span>
+                        </div>
+                        <div class="card-value" id="today-expenses">₹0.00</div>
+                        <div class="card-footer">
+                            <span id="week-expenses">Week: ₹0.00</span>
+                            <span id="month-expenses">Month: ₹0.00</span>
+                        </div>
+                    </div>
+
+                    <div class="card summary-card profit">
+                        <div class="card-header">
+                            <h3>Today's Profit</h3>
+                            <span class="icon">📊</span>
+                        </div>
+                        <div class="card-value" id="today-profit">₹0.00</div>
+                        <div class="card-footer">
+                            <span id="week-profit">Week: ₹0.00</span>
+                            <span id="month-profit">Month: ₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Recent Transactions</h3>
+                        <button class="btn-small" onclick="switchTab('transactions')">View All</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Category</th>
+                                    <th>Amount</th>
+                                    <th>Payment</th>
+                                    <th>Handler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-transactions">
+                                <tr>
+                                    <td colspan="6" class="loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Quick Charts -->
+                <div class="charts-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Weekly Overview</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="dashboard-weekly-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Handler Performance</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="dashboard-handler-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Tab -->
+            <div id="transactions-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Transaction History</h3>
+                        <div class="filter-controls">
+                            <select id="trans-type-filter" class="filter-select">
+                                <option value="">All Types</option>
+                                <option value="sales">Sales</option>
+                                <option value="expense">Expenses</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Type</th>
+                                    <th>Category</th>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                    <th>Payment</th>
+                                    <th>Handler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-transactions">
+                                <tr>
+                                    <td colspan="7" class="loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Handlers Tab -->
+            <div id="handlers-tab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Handler Performance</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Incentive Rate</th>
+                                    <th>Type</th>
+                                    <th>Total Earned</th>
+                                </tr>
+                            </thead>
+                            <tbody id="handlers-table">
+                                <tr>
+                                    <td colspan="4" class="loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Incentive Comparison</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="handlers-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div id="analytics-tab" class="tab-content">
+                <div class="charts-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Weekly Sales vs Expenses</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="weekly-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Monthly Trend</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="monthly-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Sales Breakdown</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="sales-pie-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Expense Breakdown</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="expense-pie-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card full-width">
+                        <div class="card-header">
+                            <h3>Profit Trend (Last 30 Days)</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="profit-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 DigiCal Business Portal | Auto-refreshes every 30 seconds</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+    <script src="js/charts.js"></script>
+</body>
+
+</html>

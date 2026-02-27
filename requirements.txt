@@ -1,0 +1,13 @@
+# GUI & Graphs
+matplotlib>=3.3.0
+numpy>=1.19.0
+
+# Web Portal API (Capped to v2 logic for Raspberry Pi Python 3.9 compatibility)
+Flask>=2.0.0,<3.0.0
+Werkzeug<3.0.0
+MarkupSafe<3.0.0
+Flask-CORS>=3.0.0
+
+# UPI QR Code Generation
+qrcode[pil]>=7.0.0
+Pillow>=8.0.0,<9.0.0
