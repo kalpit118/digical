@@ -154,15 +154,24 @@ class DigiCalGUI:
             "warning": (T["warning"], "#FFFFFF"),
             "info":    (T["mode_fg"], "#FFFFFF"),
         }
-        icons = {"success": "\u2713", "error": "\u2717", "warning": "\u26a0", "info": "\u2139"}
+        icons = {"warning": "\u26a0", "info": "\u2139"}
         bg, fg = colours.get(kind, colours["info"])
-        icon = icons.get(kind, "")
         toast = tk.Frame(self.root, bg=bg)
         toast.place(relx=0.05, y=55, relwidth=0.9, height=42)
         toast.lift()
-        tk.Label(toast, text=f"  {icon}  {msg}",
+        lbl = tk.Label(toast, text=f"  {icons.get(kind, '')}  {msg}" if kind in icons else f"  {msg}",
                  font=(config.BUTTON_FONT[0], 8, "bold"),
-                 bg=bg, fg=fg, anchor="w").pack(side=tk.LEFT, fill=tk.X, expand=True)
+                 bg=bg, fg=fg, anchor="w")
+        if kind == "success" and getattr(self, "_icon_success", None):
+            lbl.config(image=self._icon_success, compound=tk.LEFT, padx=5)
+        elif kind == "error" and getattr(self, "_icon_error", None):
+            lbl.config(image=self._icon_error, compound=tk.LEFT, padx=5)
+        elif kind == "success":
+            lbl.config(text=f"  \u2713  {msg}")
+        elif kind == "error":
+            lbl.config(text=f"  \u2717  {msg}")
+            
+        lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
         tk.Button(toast, text="\u2715", font=(config.BUTTON_FONT[0], 8),
                   bg=bg, fg=fg, relief=tk.FLAT, bd=0,
                   command=toast.destroy, cursor="hand2",
@@ -205,11 +214,17 @@ class DigiCalGUI:
         # Left: Apps launcher button
         try:
             from PIL import Image, ImageTk
-            _app_img_path = os.path.join(os.path.dirname(__file__), "assets", "apps.png")
+            import os
+            base_dir = os.path.dirname(__file__)
+            _app_img_path = os.path.join(base_dir, "assets", "apps.png")
             _raw_img = Image.open(_app_img_path).resize((18, 18), Image.Resampling.LANCZOS)
             self._apps_icon = ImageTk.PhotoImage(_raw_img)
+            self._icon_success = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "right.png")).resize((14, 14), Image.Resampling.LANCZOS))
+            self._icon_error = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "wrong.png")).resize((14, 14), Image.Resampling.LANCZOS))
         except Exception:
             self._apps_icon = None
+            self._icon_success = None
+            self._icon_error = None
 
         tk.Button(
             self.top_frame, text=" Apps", image=self._apps_icon, compound=tk.LEFT if self._apps_icon else tk.NONE,
@@ -1067,7 +1082,10 @@ class DigiCalGUI:
 
         def _close():
             ov.destroy()
-            self.switch_mode("calculator")
+            if self.current_mode == "calculator":
+                self.root.bind("<Escape>", lambda e: self._show_app_launcher())
+            else:
+                self.root.bind("<Escape>", lambda e: self.switch_mode("calculator"))
 
         tk.Button(hdr, text="\u2190 Back",
                   font=(config.LABEL_FONT[0], config.LABEL_FONT[1], "bold"),
@@ -1265,9 +1283,13 @@ class DigiCalGUI:
                               bg=T["bg"], fg=T["success"])
         status_lbl.pack(pady=(2, 0))
 
-        def flash_saved(msg="\u2713 Saved!"):
-            status_lbl.config(text=msg)
-            scroll_frame.after(2000, lambda: status_lbl.config(text=""))
+        def flash_saved(msg="Saved!"):
+            msg = msg.replace("\u2713 ", "")
+            if getattr(self, "_icon_success", None):
+                status_lbl.config(text=f" {msg}", image=self._icon_success, compound=tk.LEFT)
+            else:
+                status_lbl.config(text=f"\u2713 {msg}", image="")
+            scroll_frame.after(2000, lambda: status_lbl.config(text="", image=""))
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 1) APPEARANCE
@@ -1368,12 +1390,12 @@ class DigiCalGUI:
         def _clear_calcs():
             self._show_confirm("Clear ALL calculation history?", lambda: [
                 self.db.clear_history('calculations'),
-                flash_saved("\u2713 Calculation history cleared")])
+                flash_saved("Calculation history cleared")])
 
         def _clear_trans():
             self._show_confirm("Clear ALL transactions?", lambda: [
                 self.db.clear_history('transactions'),
-                flash_saved("\u2713 Transaction history cleared")])
+                flash_saved("Transaction history cleared")])
 
         def _export_csv():
             import csv
@@ -1396,7 +1418,7 @@ class DigiCalGUI:
                     writer = csv.writer(f)
                     writer.writerow(cols)
                     writer.writerows(rows)
-                flash_saved(f"\u2713 Exported \u2192 {fname}")
+                flash_saved(f"Exported \u2192 {fname}")
             except Exception as ex:
                 self._show_toast(str(ex), kind="error")
 
@@ -1909,8 +1931,19 @@ class DigiCalGUI:
         existing_phone_entry.grid(row=2, column=1, pady=12, padx=16, sticky=tk.EW)
         
         found_label = tk.Label(existing_panel, text="", font=("Arial", 14, "bold"),
-                               bg=T["bg"], fg=T["success"], wraplength=400)
+                               bg=T["bg"], fg=T["success"], wraplength=400, compound=tk.LEFT, padx=5)
         found_label.grid(row=3, column=0, columnspan=2, pady=12)
+
+        try:
+            from PIL import Image, ImageTk
+            base_dir = os.path.dirname(__file__)
+            r_path = os.path.join(base_dir, "assets", "right.png")
+            w_path = os.path.join(base_dir, "assets", "wrong.png")
+            found_label.right_img = ImageTk.PhotoImage(Image.open(r_path).resize((20, 20), Image.Resampling.LANCZOS))
+            found_label.wrong_img = ImageTk.PhotoImage(Image.open(w_path).resize((20, 20), Image.Resampling.LANCZOS))
+        except Exception:
+            found_label.right_img = None
+            found_label.wrong_img = None
         
         existing_panel.columnconfigure(1, weight=1)
         found_customer = [None]
@@ -1921,16 +1954,19 @@ class DigiCalGUI:
             phone = existing_phone_var.get().strip()
             if not cid and not phone:
                 found_customer[0] = None
-                found_label.config(text="")
+                found_label.config(text="", image="")
                 return
                 
             c = self.db.get_customer_by_id(cid) if cid else (self.db.get_customer_by_phone(phone) if phone else None)
             if c:
                 found_customer[0] = c[0]
-                found_label.config(text=f"\u2713 Found: {c[1]} (ID: {c[0]})", fg=T["success"])
+                img = found_label.right_img if hasattr(found_label, 'right_img') and found_label.right_img else ""
+                txt = f" Found: {c[1]} (ID: {c[0]})"
+                found_label.config(text=txt, fg=T["success"], image=img)
             else:
                 found_customer[0] = None
-                found_label.config(text="\u2717 No customer found", fg=T["danger"])
+                img = found_label.wrong_img if hasattr(found_label, 'wrong_img') and found_label.wrong_img else ""
+                found_label.config(text=" No customer found", fg=T["danger"], image=img)
                 
         def _on_search_change(*args):
             if _search_timer[0]:
@@ -2114,8 +2150,13 @@ class DigiCalGUI:
                  fg=T["danger"] if total_due > 0 else T["success"]).pack(pady=8)
 
         if total_due <= 0:
-            tk.Label(body, text="\u2713 No outstanding due for this customer.",
-                     font=config.LABEL_FONT, bg=T["bg"], fg=T["success"]).pack(pady=6)
+            lbl = tk.Label(body, text=" No outstanding due for this customer.",
+                     font=config.LABEL_FONT, bg=T["bg"], fg=T["success"])
+            if getattr(self, "_icon_success", None):
+                lbl.config(image=self._icon_success, compound=tk.LEFT, padx=5)
+            else:
+                lbl.config(text="\u2713 No outstanding due for this customer.")
+            lbl.pack(pady=6)
             self._neu_btn(body, "Close", command=close, kind="mode",
                           width=10, height=2).pack(pady=10)
             return
