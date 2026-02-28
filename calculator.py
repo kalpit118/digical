@@ -78,7 +78,21 @@ class Calculator:
     
     def _handle_percentage(self, expression):
         """Convert percentage operations"""
-        # Replace X% with X/100
+        # First, handle addition and subtraction of percentages (e.g., 100+10% = 110)
+        # We loop to evaluate chained operations right-to-left
+        while re.search(r'(.*)([\+\-])\s*(\d+\.?\d*)%', expression):
+            match = re.search(r'(.*)([\+\-])\s*(\d+\.?\d*)%', expression)
+            before = match.group(1).strip()
+            op = match.group(2)
+            pct = match.group(3)
+            # If before is empty, treat as 0
+            b_safe = before if before else "0"
+            
+            # Replace the matched section with mathematically equivalent expansion
+            expression = expression[:match.start()] + before + op + "((" + b_safe + ")*" + pct + "/100)" + expression[match.end():]
+            
+        # Finally, handle standalone percentage signs (e.g., 50 * 10%)
+        # Replace remaining X% with X/100
         expression = re.sub(r'(\d+\.?\d*)%', r'(\1/100)', expression)
         return expression
     

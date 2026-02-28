@@ -395,6 +395,17 @@ class Database:
         conn.close()
         return row
     
+    def update_customer(self, customer_id, name, phone, email=None):
+        """Update an existing customer's details."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE customers SET name=?, phone=?, email=? WHERE customer_id=?',
+            (name.strip(), phone.strip(), email.strip() if email else None, customer_id)
+        )
+        conn.commit()
+        conn.close()
+    
     def get_all_customers(self):
         """Return all customers ordered by customer_id."""
         conn = self.get_connection()

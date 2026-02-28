@@ -313,5 +313,5 @@ if __name__ == '__main__':
         print(f"Access from network: http://<your-ip>:{config.WEB_PORT}")
     print("="*60 + "\n")
     
-    app.run(host=config.WEB_HOST, port=config.WEB_PORT, debug=True)
+    app.run(host=config.WEB_HOST, port=config.WEB_PORT, debug=False)
 

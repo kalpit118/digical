@@ -221,12 +221,13 @@ class DigiCalGUI:
             command=self._show_app_launcher
         ).pack(side=tk.LEFT, padx=(4, 2))
 
-        # Center: app title
-        tk.Label(
+        # Center: app title (absolutely centered, shifted left slightly for visual weight of 'g')
+        title_label = tk.Label(
             self.top_frame, text="DigiCal",
             font=(config.BUTTON_FONT[0], 16, "bold"),
             bg=T["hdr_bg"], fg=T["accent"]
-        ).pack(side=tk.LEFT, expand=True)
+        )
+        title_label.place(relx=0.49, rely=0.45, anchor=tk.CENTER)
 
         # Right: handler dropdown
         handler_frame = tk.Frame(self.top_frame, bg=T["hdr_bg"])
@@ -450,7 +451,7 @@ class DigiCalGUI:
             return
         
         key = event.char
-        if key in '0123456789.':
+        if key in '0123456789.%':
             self.calculator_button_click(key)
         elif key in '+-':
             self.calculator_button_click(key)
@@ -876,11 +877,11 @@ class DigiCalGUI:
 
     def _parse_expression_to_receipt(self, expr):
         import re
-        parts = re.findall(r'[+\-×÷%]|(?:\d+\.?\d*)', expr)
+        parts = re.findall(r'[+\-×÷]|(?:\d+\.?\d*%)|(?:\d+\.?\d*)', expr)
         lines = []
         current_op = ""
         for p in parts:
-            if p in "+-×÷%":
+            if p in "+-×÷":
                 current_op = p
             else:
                 lines.append((current_op, p))
@@ -973,7 +974,13 @@ class DigiCalGUI:
         try:
             import re
             expression = expr.replace("×", "*").replace("÷", "/")
-            expression = re.sub(r'(\d+\.?\d*)%', r'(\1/100)', expression)
+            
+            # Use calculator's _handle_percentage for accurate logic
+            if hasattr(self, 'calculator'):
+                expression = self.calculator._handle_percentage(expression)
+            else:
+                expression = re.sub(r'(\d+\.?\d*)%', r'(\1/100)', expression)
+                
             expression = re.sub(r'[\+\-\*\/\.]$', '', expression)
             if not expression: return None
             # Strip leading zeros from integer tokens (010 -> 10)
@@ -1401,10 +1408,32 @@ class DigiCalGUI:
                      kind="equals").pack(side=tk.LEFT, padx=3)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # 5) ABOUT
+        # 5) WEB PORTAL
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c5 = card(scroll_frame, "", "About DigiCal")
-        tk.Label(c5, text=f"{config.APP_NAME}  v{config.VERSION}",
+        c5 = card(scroll_frame, "", "Web Portal (Phone/Laptop)")
+        portal_info = tk.Frame(c5, bg=T["bg"])
+        portal_info.pack(fill=tk.X, pady=2)
+        
+        import socket
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('10.255.255.255', 1))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except:
+            local_ip = '127.0.0.1'
+            
+        tk.Label(portal_info, text="Access from this Device:", font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=f"http://localhost:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W, pady=(0, 4))
+        
+        tk.Label(portal_info, text="Access from Phone/Laptop (Same WiFi):", font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=f"http://{local_ip}:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # 6) ABOUT
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        c6 = card(scroll_frame, "", "About DigiCal")
+        tk.Label(c6, text=f"{config.APP_NAME}  v{config.VERSION}",
                  font=(config.BUTTON_FONT[0], 9, "bold"),
                  bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
 
@@ -1438,19 +1467,30 @@ class DigiCalGUI:
             win_h = self.root.winfo_height() or 480
             target = int(win_h * 0.65)
 
-            raw = Image.open(gif_path)
-            raw_w, raw_h = raw.size
-            scale = target / raw_h if raw_h else 1
-            new_w, new_h = max(1, int(raw_w * scale)), max(1, target)
+            # Cache the frames to prevent 1-2s UI freeze
+            if not hasattr(self, '_success_gif_cache'):
+                self._success_gif_cache = {}
 
-            frames = []
-            try:
-                while True:
-                    f = raw.copy().convert("RGBA").resize((new_w, new_h), Image.LANCZOS)
-                    frames.append(ImageTk.PhotoImage(f))
-                    raw.seek(raw.tell() + 1)
-            except EOFError:
-                pass
+            if target in self._success_gif_cache:
+                frames = self._success_gif_cache[target]
+            else:
+                raw = Image.open(gif_path)
+                raw_w, raw_h = raw.size
+                scale = target / raw_h if raw_h else 1
+                new_w, new_h = max(1, int(raw_w * scale)), max(1, target)
+                
+                # Check for an existing cache and clear it to save memory if size changed
+                self._success_gif_cache.clear()
+                
+                frames = []
+                try:
+                    while True:
+                        f = raw.copy().convert("RGBA").resize((new_w, new_h), Image.LANCZOS)
+                        frames.append(ImageTk.PhotoImage(f))
+                        raw.seek(raw.tell() + 1)
+                except EOFError:
+                    pass
+                self._success_gif_cache[target] = frames
 
             gif_label = tk.Label(ov, bg=T["bg"])
             gif_label.pack(pady=(20, 8))
@@ -1561,6 +1601,34 @@ class DigiCalGUI:
                          font=("Arial", 12), bg=T["bg"],
                          fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
 
+        def _build_cash_icon():
+            for w in qr_frame.winfo_children():
+                w.destroy()
+            try:
+                from PIL import Image, ImageTk
+                import os
+                cash_path = os.path.join(os.path.dirname(__file__), "assets", "cash.png")
+                raw = Image.open(cash_path)
+                
+                # Resize proportionally to fit a similar 320x320 box as the QR code
+                raw_w, raw_h = raw.size
+                scale = min(320 / raw_w, 320 / raw_h) if raw_w and raw_h else 1
+                new_size = (max(1, int(raw_w * scale)), max(1, int(raw_h * scale)))
+                
+                img = raw.resize(new_size, Image.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+                _qr_ref[0] = photo
+                
+                tk.Label(qr_frame, image=photo, bg=T["bg"],
+                         relief=tk.FLAT).pack(pady=(8, 4))
+                tk.Label(qr_frame, text=f"\u20b9{amount_val:.2f}  in Cash",
+                         font=("Arial", 18, "bold"), bg=T["bg"],
+                         fg=T["success"]).pack()
+            except Exception as ex:
+                tk.Label(qr_frame, text=f"Cash icon error:\n{ex}",
+                         font=("Arial", 12), bg=T["bg"],
+                         fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
+
         def on_payment_change(event=None):
             pm = payment_var.get()
             if pm == "Due":
@@ -1570,11 +1638,18 @@ class DigiCalGUI:
                 due_customer[0] = None
                 _build_qr()
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
+            elif pm == "Cash":
+                due_customer[0] = None
+                _build_cash_icon()
+                qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
             else:
                 due_customer[0] = None
                 qr_frame.grid_remove()
 
         combo.bind("<<ComboboxSelected>>", on_payment_change)
+        
+        # Trigger default logic (Cash) to show the icon immediately
+        on_payment_change()
 
         # ── Save functions ──────────────────────────────────────
         def save_as_sale():
@@ -1591,6 +1666,9 @@ class DigiCalGUI:
             tid = self.transaction_manager.add_sale(amount_val, cat, desc, pm, hid)
             if pm == "Due" and due_customer[0]: self.db.add_due_record(tid, due_customer[0], amount_val)
             self._deduct_product_quantities()
+            self.calculator.clear()
+            self._line_products = {}
+            self.update_display("0")
             close()
             self._show_success_overlay(f"Sale saved  \u20b9{amount_val:.2f} [{pm}]")
 
@@ -1608,6 +1686,9 @@ class DigiCalGUI:
             tid = self.transaction_manager.add_expense(amount_val, cat, desc, pm, hid)
             if pm == "Due" and due_customer[0]: self.db.add_due_record(tid, due_customer[0], amount_val)
             self._deduct_product_quantities()
+            self.calculator.clear()
+            self._line_products = {}
+            self.update_display("0")
             close()
             self._show_success_overlay(f"Expense saved  \u20b9{amount_val:.2f} [{pm}]")
 
@@ -1797,39 +1878,52 @@ class DigiCalGUI:
         tab_frame.pack(fill=tk.X)
 
         existing_tab_btn = tk.Button(tab_frame, text="Existing Customer",
-                                     font=config.LABEL_FONT, bg=T["success"], fg="#FFFFFF",
+                                     font=("Arial", 16, "bold"), bg=T["success"], fg="#FFFFFF",
                                      relief=tk.SUNKEN, bd=2)
         new_tab_btn = tk.Button(tab_frame, text="New Customer",
-                                font=config.LABEL_FONT, bg=T["mode_bg"], fg=T["mode_fg"],
+                                font=("Arial", 16, "bold"), bg=T["mode_bg"], fg=T["mode_fg"],
                                 relief=tk.RAISED, bd=2)
         existing_tab_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
         new_tab_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         content = tk.Frame(body, bg=T["bg"])
-        content.pack(fill=tk.BOTH, expand=True, pady=6)
+        content.pack(fill=tk.BOTH, expand=True, pady=16, padx=16)
 
         # Existing panel
         existing_panel = tk.Frame(content, bg=T["bg"])
-        tk.Label(existing_panel, text="Customer ID:", font=config.LABEL_FONT,
-                 bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=4)
-        existing_id_entry = tk.Entry(existing_panel, font=config.LABEL_FONT, width=20,
+        tk.Label(existing_panel, text="Customer ID:", font=("Arial", 16),
+                 bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=12)
+        existing_id_var = tk.StringVar()
+        existing_id_entry = tk.Entry(existing_panel, textvariable=existing_id_var, font=("Arial", 22), width=24,
                                      bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
-        existing_id_entry.grid(row=0, column=1, pady=4, padx=6)
-        tk.Label(existing_panel, text="  OR  ", font=config.LABEL_FONT,
-                 bg=T["bg"], fg=T["subtext"]).grid(row=1, column=0, columnspan=2, pady=2)
-        tk.Label(existing_panel, text="Phone Number:", font=config.LABEL_FONT,
-                 bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=4)
-        existing_phone_entry = tk.Entry(existing_panel, font=config.LABEL_FONT, width=20,
+        existing_id_entry.grid(row=0, column=1, pady=12, padx=16, sticky=tk.EW)
+        
+        tk.Label(existing_panel, text="  OR  ", font=("Arial", 16, "bold"),
+                 bg=T["bg"], fg=T["subtext"]).grid(row=1, column=0, columnspan=2, pady=8)
+                 
+        tk.Label(existing_panel, text="Phone Number:", font=("Arial", 16),
+                 bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=12)
+        existing_phone_var = tk.StringVar()
+        existing_phone_entry = tk.Entry(existing_panel, textvariable=existing_phone_var, font=("Arial", 22), width=24,
                                         bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
-        existing_phone_entry.grid(row=2, column=1, pady=4, padx=6)
-        found_label = tk.Label(existing_panel, text="", font=config.LABEL_FONT,
-                               bg=T["bg"], fg=T["success"], wraplength=260)
-        found_label.grid(row=3, column=0, columnspan=2, pady=4)
+        existing_phone_entry.grid(row=2, column=1, pady=12, padx=16, sticky=tk.EW)
+        
+        found_label = tk.Label(existing_panel, text="", font=("Arial", 14, "bold"),
+                               bg=T["bg"], fg=T["success"], wraplength=400)
+        found_label.grid(row=3, column=0, columnspan=2, pady=12)
+        
+        existing_panel.columnconfigure(1, weight=1)
         found_customer = [None]
+        _search_timer = [None]
 
-        def find_customer():
-            cid = existing_id_entry.get().strip()
-            phone = existing_phone_entry.get().strip()
+        def _do_search():
+            cid = existing_id_var.get().strip()
+            phone = existing_phone_var.get().strip()
+            if not cid and not phone:
+                found_customer[0] = None
+                found_label.config(text="")
+                return
+                
             c = self.db.get_customer_by_id(cid) if cid else (self.db.get_customer_by_phone(phone) if phone else None)
             if c:
                 found_customer[0] = c[0]
@@ -1837,37 +1931,46 @@ class DigiCalGUI:
             else:
                 found_customer[0] = None
                 found_label.config(text="\u2717 No customer found", fg=T["danger"])
+                
+        def _on_search_change(*args):
+            if _search_timer[0]:
+                self.root.after_cancel(_search_timer[0])
+            _search_timer[0] = self.root.after(1000, _do_search)
 
-        tk.Button(existing_panel, text="Find", font=config.LABEL_FONT,
-                  bg=T["btn_bg"], fg=T["btn_fg"], command=find_customer,
-                  width=8).grid(row=4, column=0, columnspan=2, pady=6)
+        existing_id_var.trace_add("write", _on_search_change)
+        existing_phone_var.trace_add("write", _on_search_change)
 
         # New customer panel
         new_panel = tk.Frame(content, bg=T["bg"])
         id_row = tk.Frame(new_panel, bg=T["bg"])
-        id_row.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=4)
-        tk.Label(id_row, text="Customer ID:", font=config.LABEL_FONT,
+        id_row.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=8)
+        tk.Label(id_row, text="Customer ID:", font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
         tk.Label(id_row, text=self.db.get_next_customer_id(),
-                 font=("Arial", 9, "bold"), bg=T["bg"], fg=T["warning"]).pack(side=tk.LEFT, padx=6)
-        tk.Label(new_panel, text="Name *:", font=config.LABEL_FONT,
-                 bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=4)
-        new_name_entry = tk.Entry(new_panel, font=config.LABEL_FONT, width=20,
+                 font=("Arial", 16, "bold"), bg=T["bg"], fg=T["warning"]).pack(side=tk.LEFT, padx=6)
+                 
+        tk.Label(new_panel, text="Name *:", font=("Arial", 16),
+                 bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=12)
+        new_name_entry = tk.Entry(new_panel, font=("Arial", 22), width=24,
                                   bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
-        new_name_entry.grid(row=1, column=1, pady=4, padx=6)
-        tk.Label(new_panel, text="Phone *:", font=config.LABEL_FONT,
-                 bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=4)
+        new_name_entry.grid(row=1, column=1, pady=12, padx=16, sticky=tk.EW)
+        
+        tk.Label(new_panel, text="Phone *:", font=("Arial", 16),
+                 bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=12)
         phone_var = tk.StringVar()
         vcmd = (new_panel.register(lambda v: (v.isdigit() and len(v) <= 10) or v == ""), '%P')
-        new_phone_entry = tk.Entry(new_panel, textvariable=phone_var, font=config.LABEL_FONT,
-                                   width=20, validate="key", validatecommand=vcmd,
+        new_phone_entry = tk.Entry(new_panel, textvariable=phone_var, font=("Arial", 22),
+                                   width=24, validate="key", validatecommand=vcmd,
                                    bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
-        new_phone_entry.grid(row=2, column=1, pady=4, padx=6)
-        tk.Label(new_panel, text="Email:", font=config.LABEL_FONT,
-                 bg=T["bg"], fg=T["text"]).grid(row=3, column=0, sticky=tk.W, pady=4)
-        new_email_entry = tk.Entry(new_panel, font=config.LABEL_FONT, width=20,
+        new_phone_entry.grid(row=2, column=1, pady=12, padx=16, sticky=tk.EW)
+        
+        tk.Label(new_panel, text="Email:", font=("Arial", 16),
+                 bg=T["bg"], fg=T["text"]).grid(row=3, column=0, sticky=tk.W, pady=12)
+        new_email_entry = tk.Entry(new_panel, font=("Arial", 22), width=24,
                                    bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
-        new_email_entry.grid(row=3, column=1, pady=4, padx=6)
+        new_email_entry.grid(row=3, column=1, pady=12, padx=16, sticky=tk.EW)
+        
+        new_panel.columnconfigure(1, weight=1)
 
         def show_existing():
             new_panel.pack_forget(); existing_panel.pack(fill=tk.BOTH, expand=True)
@@ -1901,11 +2004,11 @@ class DigiCalGUI:
                 on_confirm(cid); close()
 
         btn_row = tk.Frame(body, bg=T["bg"])
-        btn_row.pack(pady=8)
+        btn_row.pack(pady=16)
         self._neu_btn(btn_row, "Confirm", command=confirm, kind="equals",
-                      width=10, height=2).pack(side=tk.LEFT, padx=6)
+                      width=14, height=2).pack(side=tk.LEFT, padx=10)
         self._neu_btn(btn_row, "Cancel", command=close, kind="mode",
-                      width=10, height=2).pack(side=tk.LEFT, padx=6)
+                      width=14, height=2).pack(side=tk.LEFT, padx=10)
 
     def show_customers_mode(self):
         """Show customer list with total unsettled dues."""
@@ -1919,6 +2022,9 @@ class DigiCalGUI:
             bg=config.BUTTON_BG, fg="white",
             command=self.switch_mode_customers
         ).pack(side=tk.RIGHT, padx=4)
+        
+        edit_btn = self._neu_btn(ctrl_frame, "\u270e Edit Customer", kind="mode")
+        edit_btn.pack(side=tk.RIGHT, padx=4)
         
         # Treeview
         tree_frame = tk.Frame(self.content_frame, bg=config.BG_COLOR)
@@ -1976,6 +2082,17 @@ class DigiCalGUI:
             text="\u25cf Red rows = outstanding due  |  Click any row to settle",
             font=("Arial", 7), bg=config.BG_COLOR, fg="#E74C3C"
         ).pack(anchor=tk.W, padx=4)
+        
+        def _open_customer_finder():
+            def on_found(cid):
+                c = self.db.get_customer_by_id(cid)
+                if c:
+                    self._customer_modify_dialog(c)
+                else:
+                    self._show_toast("Customer not found", kind="error")
+            self.show_due_customer_dialog(on_found)
+            
+        edit_btn.config(command=_open_customer_finder)
     
     def switch_mode_customers(self):
         """Helper to cleanly refresh Customers mode."""
@@ -2050,6 +2167,78 @@ class DigiCalGUI:
                       width=10, height=2).pack(side=tk.LEFT, padx=6)
         self._neu_btn(br, "Cancel", command=close, kind="mode",
                       width=10, height=2).pack(side=tk.LEFT, padx=6)
+
+    def _customer_modify_dialog(self, row_values):
+        if not row_values: return
+        customer_id = row_values[0]
+        c = self.db.get_customer_by_id(customer_id)
+        if not c:
+            self._show_toast("Customer not found", kind="error"); return
+        cid, name, phone, email = c
+
+        T = self.T
+        ov, body, close = self._open_overlay(f"Edit Customer \u2014 ID {cid}")
+
+        tk.Label(body, text=f"Edit Customer \u2014 ID {cid}",
+                 font=(config.BUTTON_FONT[0], 12, "bold"),
+                 bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
+        
+        form_frame = tk.Frame(body, bg=T["bg"])
+        form_frame.pack(padx=6, fill=tk.X, pady=6)
+
+        def lbl(row, text):
+            tk.Label(form_frame, text=text, font=config.LABEL_FONT,
+                     bg=T["bg"], fg=T["text"]).grid(row=row, column=0, sticky=tk.W, pady=3, padx=6)
+
+        def entry(row, init_val=""):
+            e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22,
+                         bg=T["entry_bg"], fg=T["entry_fg"],
+                         insertbackground=T["text"], relief=tk.FLAT,
+                         highlightthickness=1, highlightbackground=T["shadow_dark"])
+            e.grid(row=row, column=1, pady=3, padx=6)
+            if init_val is not None:
+                e.insert(0, str(init_val))
+            return e
+
+        lbl(0, "Name *:")
+        name_e = entry(0, name)
+
+        lbl(1, "Phone *:")
+        phone_var = tk.StringVar(value=phone or "")
+        vcmd = (form_frame.register(lambda v: (v.isdigit() and len(v) <= 10) or v == ""), '%P')
+        phone_e = tk.Entry(form_frame, textvariable=phone_var, font=config.LABEL_FONT, width=22,
+                           validate="key", validatecommand=vcmd,
+                           bg=T["entry_bg"], fg=T["entry_fg"],
+                           insertbackground=T["text"], relief=tk.FLAT,
+                           highlightthickness=1, highlightbackground=T["shadow_dark"])
+        phone_e.grid(row=1, column=1, pady=3, padx=6)
+
+        lbl(2, "Email:")
+        email_e = entry(2, email or "")
+
+        def _update():
+            new_name = name_e.get().strip()
+            new_phone = phone_e.get().strip()
+            new_email = email_e.get().strip() or None
+            
+            if not new_name:
+                self._show_toast("Customer Name is mandatory", kind="error"); return
+            if not new_phone:
+                self._show_toast("Phone Number is mandatory", kind="error"); return
+            if len(new_phone) != 10:
+                self._show_toast("Phone must be exactly 10 digits", kind="error"); return
+                
+            self.db.update_customer(cid, new_name, new_phone, new_email)
+            self._show_toast(f"Customer #{cid} updated")
+            close()
+            self.switch_mode_customers()
+
+        bf = tk.Frame(body, bg=T["bg"])
+        bf.pack(pady=12)
+        self._neu_btn(bf, "Update", command=_update, kind="equals",
+                      width=10, height=2).pack(side=tk.LEFT, padx=5)
+        self._neu_btn(bf, "Cancel", command=close, kind="mode",
+                      width=10, height=2).pack(side=tk.LEFT, padx=5)
 
     # ── Products (Inventory) ────────────────────────────────────────────
     def show_products_mode(self):
