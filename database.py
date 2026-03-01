@@ -288,11 +288,37 @@ class Database:
         conn.close()
         return (success, handler_id)
     
+    def update_handler(self, handler_id, name, incentive_percentage, incentive_type):
+        """Update an existing handler"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                'UPDATE handlers SET name=?, incentive_percentage=?, incentive_type=? WHERE id=?',
+                (name.strip(), float(incentive_percentage), incentive_type, handler_id)
+            )
+            conn.commit()
+            success = True
+        except sqlite3.IntegrityError:
+            success = False
+        conn.close()
+        return success
+    
+    def delete_handler(self, handler_id):
+        """Delete a handler and nullify related records."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE transactions SET handler_id = NULL WHERE handler_id = ?', (handler_id,))
+        cursor.execute('UPDATE calculations SET handler_id = NULL WHERE handler_id = ?', (handler_id,))
+        cursor.execute('DELETE FROM handlers WHERE id = ?', (handler_id,))
+        conn.commit()
+        conn.close()
+    
     def get_handlers(self):
         """Get all handlers"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT id, name, incentive_percentage, incentive_type, is_active FROM handlers ORDER BY name')
+        cursor.execute('SELECT id, name, incentive_percentage, incentive_type, is_active FROM handlers ORDER BY id')
         handlers = cursor.fetchall()
         conn.close()
         return handlers

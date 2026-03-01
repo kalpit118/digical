@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import os
 import config
+import locales
 from calculator import Calculator
 from database import Database
 from transaction_manager import TransactionManager
@@ -33,6 +34,8 @@ class DigiCalGUI:
         # ── Theme state (load before any widget is created) ───────────────
         settings = self._load_settings()
         self.dark_mode: bool = settings.get("dark_mode", False)
+        self.language = settings.get("language", "en")
+        self.tr = locales.get_translator(self.language)
         self.T: dict = config.get_theme(self.dark_mode)
         self._apply_ttk_styles()
         self.root.configure(bg=self.T["bg"])
@@ -102,6 +105,7 @@ class DigiCalGUI:
 
     def apply_theme(self):
         """Refresh T, re-style ttk, then destroy+rebuild all widgets."""
+        self.tr = locales.get_translator(self.language)
         self.T = config.get_theme(self.dark_mode)
         self._apply_ttk_styles()
         self.root.configure(bg=self.T["bg"])
@@ -115,6 +119,12 @@ class DigiCalGUI:
         """Persist dark_mode setting and apply theme immediately."""
         self.dark_mode = val
         self._save_settings({"dark_mode": val})
+        self.apply_theme()
+
+    def _change_language(self, lang_code: str):
+        """Persist language setting and apply immediately."""
+        self.language = lang_code
+        self._save_settings({"language": lang_code})
         self.apply_theme()
 
     def _neu_btn(self, parent, text, command=None, kind="normal", **kw):
@@ -227,7 +237,7 @@ class DigiCalGUI:
             self._icon_error = None
 
         tk.Button(
-            self.top_frame, text=" Apps", image=self._apps_icon, compound=tk.LEFT if self._apps_icon else tk.NONE,
+            self.top_frame, text=" " + self.tr("Apps"), image=self._apps_icon, compound=tk.LEFT if self._apps_icon else tk.NONE,
             font=(config.LABEL_FONT[0], config.LABEL_FONT[1], "bold"),
             bg=T["mode_bg"], fg=T["mode_fg"],
             relief=tk.FLAT, bd=0, cursor="hand2",
@@ -238,7 +248,7 @@ class DigiCalGUI:
 
         # Center: app title (absolutely centered, shifted left slightly for visual weight of 'g')
         title_label = tk.Label(
-            self.top_frame, text="DigiCal",
+            self.top_frame, text=self.tr("DigiCal"),
             font=(config.BUTTON_FONT[0], 16, "bold"),
             bg=T["hdr_bg"], fg=T["accent"]
         )
@@ -250,11 +260,11 @@ class DigiCalGUI:
         tk.Label(handler_frame, text="H:",
                  font=(config.LABEL_FONT[0], 10, "bold"), bg=T["hdr_bg"], fg=T["subtext"]).pack(side=tk.LEFT, padx=2)
         self.handler_var = tk.StringVar()
-        self.handler_dropdown = ttk.Combobox(
-            handler_frame, textvariable=self.handler_var,
-            font=(config.LABEL_FONT[0], 10), width=8, state="readonly"
-        )
-        self.handler_dropdown.pack(side=tk.LEFT)
+        self.handler_dropdown = ttk.Combobox(handler_frame, textvariable=self.handler_var, 
+                                            state="readonly", width=12, font=config.LABEL_FONT)
+        self.handler_dropdown.pack(side=tk.RIGHT)
+        
+        self.update_handler_dropdown()
         self.handler_dropdown.bind('<<ComboboxSelected>>', self.on_handler_selected)
         self.update_handler_dropdown()
 
@@ -360,6 +370,8 @@ class DigiCalGUI:
             self.show_customers_mode()
         elif mode == "products":
             self.show_products_mode()
+        elif mode == "handlers":
+            self.show_handlers_mode()
         elif mode == "settings":
             self.show_settings_mode()
     
@@ -440,7 +452,7 @@ class DigiCalGUI:
             self.update_display(self.calculator.get_expression())
         elif button == 'MC':
             self.calculator.clear_memory()
-            self._show_toast("Memory cleared")
+            self._show_toast(self.tr("Memory cleared"))
         elif button == 'MR':
             mem_value = self.calculator.recall_memory()
             self.calculator.set_expression(mem_value)
@@ -449,14 +461,14 @@ class DigiCalGUI:
             try:
                 value = float(self.display.cget("text"))
                 self.calculator.add_to_memory(value)
-                self._show_toast(f"Added {value} to memory")
+                self._show_toast(self.tr("Added {} to memory").format(value))
             except:
                 pass
         elif button == 'M-':
             try:
                 value = float(self.display.cget("text"))
                 self.calculator.subtract_from_memory(value)
-                self._show_toast(f"Subtracted {value} from memory")
+                self._show_toast(self.tr("Subtracted {} from memory").format(value))
             except:
                 pass
     
@@ -484,12 +496,12 @@ class DigiCalGUI:
     def show_sales_mode(self):
         """Show sales entry interface"""
         T = self.T
-        self.update_display("Add Sales Transaction")
+        self.update_display(self.tr("Add Sales Transaction"))
 
         form_frame = tk.Frame(self.content_frame, bg=T["bg"])
         form_frame.pack(pady=5)
 
-        tk.Label(form_frame, text="Amount:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Amount:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=5)
         amount_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                                 bg=T["entry_bg"], fg=T["entry_fg"],
@@ -497,7 +509,7 @@ class DigiCalGUI:
                                 highlightthickness=1, highlightbackground=T["shadow_dark"])
         amount_entry.grid(row=0, column=1, pady=5, padx=10)
 
-        tk.Label(form_frame, text="Category:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Category:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=5)
         category_var = tk.StringVar()
         categories = self.transaction_manager.get_sales_categories()
@@ -509,7 +521,7 @@ class DigiCalGUI:
         elif categories:
             category_combo.current(0)
 
-        tk.Label(form_frame, text="Description:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Description:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=5)
         desc_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                               bg=T["entry_bg"], fg=T["entry_fg"],
@@ -517,7 +529,7 @@ class DigiCalGUI:
                               highlightthickness=1, highlightbackground=T["shadow_dark"])
         desc_entry.grid(row=2, column=1, pady=5, padx=10)
 
-        tk.Label(form_frame, text="Payment:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Payment:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=3, column=0, sticky=tk.W, pady=5)
         payment_var = tk.StringVar(value="Cash")
         payment_combo = ttk.Combobox(form_frame, textvariable=payment_var,
@@ -543,12 +555,12 @@ class DigiCalGUI:
                 category = category_var.get()
                 description = desc_entry.get()
                 if not category:
-                    self._show_toast("Please select a category", kind="error")
+                    self._show_toast(self.tr("Please select a category"), kind="error")
                     return
                 payment_method = payment_var.get()
                 if payment_method == "Due":
                     if not due_customer[0]:
-                        self._show_toast("Please select a customer for Due payment", kind="error")
+                        self._show_toast(self.tr("Please select a customer for Due payment"), kind="error")
                         return
                     description = f"{description} [Due: {due_customer[0]}]".strip()
                 handler_id = None
@@ -559,16 +571,16 @@ class DigiCalGUI:
                 if payment_method == "Due" and due_customer[0]:
                     self.db.add_due_record(trans_id, due_customer[0], amount)
                 self._deduct_product_quantities()
-                self._show_toast(f"Sales transaction of ₹{amount:.2f} added")
+                self._show_toast(f"Sales transaction of ₹{amount:.2f} added") # Skip translate, dynamic
                 amount_entry.delete(0, tk.END)
                 desc_entry.delete(0, tk.END)
                 due_customer[0] = None
                 payment_var.set("Cash")
                 self.show_transaction_summary('sales')
             except ValueError:
-                self._show_toast("Please enter a valid amount", kind="error")
+                self._show_toast(self.tr("Please enter a valid amount"), kind="error")
 
-        self._neu_btn(form_frame, "Add Sale", command=add_sale,
+        self._neu_btn(form_frame, self.tr("Add Sale"), command=add_sale,
                      kind="equals", width=20, height=2
                      ).grid(row=4, column=0, columnspan=2, pady=5)
 
@@ -578,12 +590,12 @@ class DigiCalGUI:
     def show_expense_mode(self):
         """Show expense entry interface"""
         T = self.T
-        self.update_display("Add Expense Transaction")
+        self.update_display(self.tr("Add Expense Transaction"))
 
         form_frame = tk.Frame(self.content_frame, bg=T["bg"])
         form_frame.pack(pady=5)
 
-        tk.Label(form_frame, text="Amount:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Amount:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=5)
         amount_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                                 bg=T["entry_bg"], fg=T["entry_fg"],
@@ -591,7 +603,7 @@ class DigiCalGUI:
                                 highlightthickness=1, highlightbackground=T["shadow_dark"])
         amount_entry.grid(row=0, column=1, pady=5, padx=10)
 
-        tk.Label(form_frame, text="Category:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Category:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=5)
         category_var = tk.StringVar()
         categories = self.transaction_manager.get_expense_categories()
@@ -603,7 +615,7 @@ class DigiCalGUI:
         elif categories:
             category_combo.current(0)
 
-        tk.Label(form_frame, text="Description:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Description:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=5)
         desc_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                               bg=T["entry_bg"], fg=T["entry_fg"],
@@ -611,7 +623,7 @@ class DigiCalGUI:
                               highlightthickness=1, highlightbackground=T["shadow_dark"])
         desc_entry.grid(row=2, column=1, pady=5, padx=10)
 
-        tk.Label(form_frame, text="Payment:", font=config.LABEL_FONT,
+        tk.Label(form_frame, text=self.tr("Payment:"), font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"]).grid(row=3, column=0, sticky=tk.W, pady=5)
         payment_var = tk.StringVar(value="Cash")
         payment_combo = ttk.Combobox(form_frame, textvariable=payment_var,
@@ -637,12 +649,12 @@ class DigiCalGUI:
                 category = category_var.get()
                 description = desc_entry.get()
                 if not category:
-                    self._show_toast("Please select a category", kind="error")
+                    self._show_toast(self.tr("Please select a category"), kind="error")
                     return
                 payment_method = payment_var.get()
                 if payment_method == "Due":
                     if not due_customer[0]:
-                        self._show_toast("Please select a customer for Due payment", kind="error")
+                        self._show_toast(self.tr("Please select a customer for Due payment"), kind="error")
                         return
                     description = f"{description} [Due: {due_customer[0]}]".strip()
                 handler_id = None
@@ -660,9 +672,9 @@ class DigiCalGUI:
                 payment_var.set("Cash")
                 self.show_transaction_summary('expense')
             except ValueError:
-                self._show_toast("Please enter a valid amount", kind="error")
+                self._show_toast(self.tr("Please enter a valid amount"), kind="error")
 
-        self._neu_btn(form_frame, "Add Expense", command=add_expense,
+        self._neu_btn(form_frame, self.tr("Add Expense"), command=add_expense,
                      kind="danger", width=20, height=2
                      ).grid(row=4, column=0, columnspan=2, pady=5)
 
@@ -683,18 +695,18 @@ class DigiCalGUI:
             daily_val = daily['total_sales']
             weekly_val = weekly['total_sales']
             monthly_val = monthly['total_sales']
-            title = "Sales Summary"
+            title = self.tr("Sales Summary")
         else:
             daily_val = daily['total_expenses']
             weekly_val = weekly['total_expenses']
             monthly_val = monthly['total_expenses']
-            title = "Expense Summary"
+            title = self.tr("Expense Summary")
 
         tk.Label(summary_frame, text=title,
                  font=(config.BUTTON_FONT[0], 12, "bold"),
                  bg=T["bg"], fg=T["accent"]).pack(pady=5)
 
-        info_text = f"Today: ₹{daily_val:.2f}\nThis Week: ₹{weekly_val:.2f}\nThis Month: ₹{monthly_val:.2f}"
+        info_text = self.tr("Today: ₹{:.2f}\nThis Week: ₹{:.2f}\nThis Month: ₹{:.2f}").format(daily_val, weekly_val, monthly_val)
         tk.Label(summary_frame, text=info_text, font=config.LABEL_FONT,
                  bg=T["bg"], fg=T["text"], justify=tk.LEFT).pack(pady=5)
 
@@ -702,23 +714,23 @@ class DigiCalGUI:
     def show_history_mode(self):
         """Show history interface"""
         T = self.T
-        self.update_display("Transaction & Calculation History")
+        self.update_display(self.tr("Transaction & Calculation History"))
 
         notebook = ttk.Notebook(self.content_frame)
         notebook.pack(fill=tk.BOTH, expand=True)
 
         calc_frame = tk.Frame(notebook, bg=T["bg"])
-        notebook.add(calc_frame, text="Calculations")
+        notebook.add(calc_frame, text=self.tr("Calculations"))
         
-        calc_cols = ("Date", "Calculation", "Result")
+        calc_cols = (self.tr("Date"), self.tr("Calculation"), self.tr("Result"))
         calc_tree = ttk.Treeview(calc_frame, columns=calc_cols, show="headings", height=15)
         
-        calc_tree.heading("Date", text="Date")
-        calc_tree.column("Date", width=150, anchor=tk.W)
-        calc_tree.heading("Calculation", text="Calculation")
-        calc_tree.column("Calculation", width=250, anchor=tk.W)
-        calc_tree.heading("Result", text="Result")
-        calc_tree.column("Result", width=150, anchor=tk.W)
+        calc_tree.heading(self.tr("Date"), text=self.tr("Date"))
+        calc_tree.column(self.tr("Date"), width=150, anchor=tk.W)
+        calc_tree.heading(self.tr("Calculation"), text=self.tr("Calculation"))
+        calc_tree.column(self.tr("Calculation"), width=250, anchor=tk.W)
+        calc_tree.heading(self.tr("Result"), text=self.tr("Result"))
+        calc_tree.column(self.tr("Result"), width=150, anchor=tk.W)
         
         calc_tree.tag_configure("odd", background=T.get("tree_odd", "#34495E"), foreground=T.get("tree_fg", "white"))
         calc_tree.tag_configure("even", background=T.get("tree_even", "#2C3E50"), foreground=T.get("tree_fg", "white"))
@@ -733,12 +745,12 @@ class DigiCalGUI:
             calc_tree.insert("", tk.END, values=(timestamp, expr, result), tags=(tag,))
 
         trans_frame = tk.Frame(notebook, bg=T["bg"])
-        notebook.add(trans_frame, text="Transactions")
+        notebook.add(trans_frame, text=self.tr("Transactions"))
         
-        trans_cols = ("Date", "Type", "Amount (\u20b9)", "Category", "Method", "Handler")
+        trans_cols = (self.tr("Date"), self.tr("Type"), self.tr("Amount (₹)"), self.tr("Category"), self.tr("Method"), self.tr("Handler"))
         trans_tree = ttk.Treeview(trans_frame, columns=trans_cols, show="headings", height=15)
         
-        col_widths = {"Date": 150, "Type": 70, "Amount (\u20b9)": 100, "Category": 180, "Method": 90, "Handler": 120}
+        col_widths = {self.tr("Date"): 150, self.tr("Type"): 70, self.tr("Amount (₹)"): 100, self.tr("Category"): 180, self.tr("Method"): 90, self.tr("Handler"): 120}
         for col in trans_cols:
             trans_tree.heading(col, text=col)
             trans_tree.column(col, width=col_widths[col], anchor=tk.W)
@@ -753,7 +765,7 @@ class DigiCalGUI:
         trans_sb.pack(side=tk.RIGHT, fill=tk.Y, padx=(0,5), pady=5)
         
         for i, trans in enumerate(self.history_manager.get_transaction_history()):
-            t_type = "Sales" if trans[1] == "sales" else "Expense"
+            t_type = self.tr("Sales") if trans[1] == "sales" else self.tr("Expense")
             amount = f"{trans[2]:.2f}"
             category = trans[3]
             date = trans[5] if len(trans) > 5 else "-"
@@ -766,7 +778,7 @@ class DigiCalGUI:
     def show_graphs_mode(self):
         """Show graphs interface with scrollable button navigation and responsive charts"""
         T = self.T
-        self.update_display("Sales & Expense Analytics")
+        self.update_display(self.tr("Sales & Expense Analytics"))
 
         # Scrollable Button Bar
         btn_container = tk.Frame(self.content_frame, bg=T["bg"], height=65)
@@ -787,12 +799,12 @@ class DigiCalGUI:
 
         # Buttons in scrollable frame
         graph_buttons = [
-            ("Weekly Chart", self.show_weekly_graph),
-            ("Monthly Trend", self.show_monthly_graph),
-            ("Sales Pie", lambda: self.show_category_pie('sales')),
-            ("Expense Pie", lambda: self.show_category_pie('expense')),
-            ("Profit Trend", self.show_profit_graph),
-            ("Handlers", self.show_handler_performance)
+            (self.tr("Weekly Chart"), self.show_weekly_graph),
+            (self.tr("Monthly Trend"), self.show_monthly_graph),
+            (self.tr("Sales Pie"), lambda: self.show_category_pie('sales')),
+            (self.tr("Expense Pie"), lambda: self.show_category_pie('expense')),
+            (self.tr("Profit Trend"), self.show_profit_graph),
+            (self.tr("Handlers"), self.show_handler_performance)
         ]
 
         for text, command in graph_buttons:
@@ -1082,7 +1094,9 @@ class DigiCalGUI:
 
         def _close():
             ov.destroy()
-            if self.current_mode == "calculator":
+            if self.current_mode == "settings":
+                self.switch_mode("calculator")
+            elif self.current_mode == "calculator":
                 self.root.bind("<Escape>", lambda e: self._show_app_launcher())
             else:
                 self.root.bind("<Escape>", lambda e: self.switch_mode("calculator"))
@@ -1114,7 +1128,7 @@ class DigiCalGUI:
         hdr = tk.Frame(ov, bg=T["hdr_bg"], height=30)
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
-        tk.Label(hdr, text=" DigiCal Apps",
+        tk.Label(hdr, text=" " + self.tr("DigiCal Apps"),
                  image=getattr(self, '_apps_icon', None),
                  compound=tk.LEFT if getattr(self, '_apps_icon', None) else tk.NONE,
                  font=(config.BUTTON_FONT[0], 9, "bold"),
@@ -1133,13 +1147,14 @@ class DigiCalGUI:
         self.root.bind("<Escape>", _close)
 
         apps = [
-            ("Sales",     "sales.png", "sales"),
-            ("Expense",   "expense.png", "expense"),
-            ("History",   "history.png", "history"),
-            ("Graphs",    "graph.png", "graphs"),
-            ("Customers", "customer.png", "customers"),
-            ("Products",  "product.png", "products"),
-            ("Settings",  "settings.png", "settings"),
+            (self.tr("Sales"),     "sales.png", "sales"),
+            (self.tr("Expense"),   "expense.png", "expense"),
+            (self.tr("History"),   "history.png", "history"),
+            (self.tr("Graphs"),    "graph.png", "graphs"),
+            (self.tr("Customers"), "customer.png", "customers"),
+            (self.tr("Products"),  "product.png", "products"),
+            (self.tr("Handlers"),  "handler.png", "handlers"),
+            (self.tr("Settings"),  "settings.png", "settings"),
         ]
 
         if not hasattr(self, '_launcher_icons'):
@@ -1219,7 +1234,7 @@ class DigiCalGUI:
     def show_settings_mode(self):
         """Full-window overlay with beautiful card-based settings."""
         T = self.T
-        ov, body, close = self._open_overlay("Settings")
+        ov, body, close = self._open_overlay(self.tr("Settings"))
         settings = self._load_settings()
 
         # ── Scrollable container ───────────────────────────────────────────
@@ -1283,7 +1298,7 @@ class DigiCalGUI:
                               bg=T["bg"], fg=T["success"])
         status_lbl.pack(pady=(2, 0))
 
-        def flash_saved(msg="Saved!"):
+        def flash_saved(msg=self.tr("Saved!")):
             msg = msg.replace("\u2713 ", "")
             if getattr(self, "_icon_success", None):
                 status_lbl.config(text=f" {msg}", image=self._icon_success, compound=tk.LEFT)
@@ -1294,13 +1309,36 @@ class DigiCalGUI:
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 1) APPEARANCE
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c1 = card(scroll_frame, "", "Appearance")
+        c1 = card(scroll_frame, "", self.tr("Appearance & Language"))
+        
+        # Language Selection row
+        lang_row = tk.Frame(c1, bg=T["bg"])
+        lang_row.pack(fill=tk.X, pady=2)
+        tk.Label(lang_row, text=self.tr("Language"),
+                 font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
+        lang_options = {"en": "English", "mr": "मराठी", "hi": "हिंदी"}
+        lang_var = tk.StringVar(value=lang_options.get(self.language, "English"))
+        
+        def on_lang_change(event):
+            val = lang_var.get()
+            code = next((k for k, v in lang_options.items() if v == val), "en")
+            if code != self.language:
+                self._change_language(code)
+                # Restart Settings screen implicitly by closing and letting user reopen OR we can manually reopen it.
+                # Since reloading theme destroys UI, we should just let apply_theme handle it. 
+                # apply_theme brings us back to current_mode, which is fine!
+                
+        lang_combo = ttk.Combobox(lang_row, textvariable=lang_var, values=list(lang_options.values()),
+                                  state="readonly", width=12, font=config.LABEL_FONT)
+        lang_combo.bind("<<ComboboxSelected>>", on_lang_change)
+        lang_combo.pack(side=tk.RIGHT, padx=4)
+
         dark_row = tk.Frame(c1, bg=T["bg"])
         dark_row.pack(fill=tk.X, pady=2)
-        tk.Label(dark_row, text="Dark Mode",
+        tk.Label(dark_row, text=self.tr("Dark Mode"),
                  font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
         dark_var = tk.BooleanVar(value=self.dark_mode)
-        icon_text = "   OFF" if not self.dark_mode else "   ON"
+        icon_text = "   " + self.tr("OFF") if not self.dark_mode else "   " + self.tr("ON")
         tk.Checkbutton(
             dark_row, text=icon_text, variable=dark_var,
             font=(config.BUTTON_FONT[0], 9),
@@ -1314,19 +1352,19 @@ class DigiCalGUI:
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 2) BUSINESS INFO
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c2 = card(scroll_frame, "", "Business Info")
+        c2 = card(scroll_frame, "", self.tr("Business Info"))
         grid2 = tk.Frame(c2, bg=T["bg"])
         grid2.pack(fill=tk.X)
 
-        row_label(grid2, "Shop / Business Name:", 0)
+        row_label(grid2, self.tr("Shop / Business Name:"), 0)
         shop_var = tk.StringVar(value=settings.get("shop_name", "My Shop"))
         themed_entry(grid2, shop_var, width=16).grid(row=0, column=1, padx=6, pady=2)
 
-        row_label(grid2, "Currency Symbol:", 1)
+        row_label(grid2, self.tr("Currency Symbol:"), 1)
         curr_var = tk.StringVar(value=settings.get("currency_symbol", config.CURRENCY_SYMBOL))
         themed_entry(grid2, curr_var, width=5).grid(row=1, column=1, padx=6, pady=2, sticky=tk.W)
 
-        row_label(grid2, "Low Stock Alert (%):", 2)
+        row_label(grid2, self.tr("Low Stock Alert (%):"), 2)
         stock_var = tk.StringVar(value=str(settings.get("low_stock_pct", 20)))
         themed_entry(grid2, stock_var, width=5).grid(row=2, column=1, padx=6, pady=2, sticky=tk.W)
 
@@ -1337,7 +1375,7 @@ class DigiCalGUI:
                 if pct_val < 1 or pct_val > 99:
                     raise ValueError
             except ValueError:
-                self._show_toast("Low stock % must be 1\u201399", kind="error")
+                self._show_toast(self.tr("Low stock % must be 1\u201399"), kind="error")
                 return
             self._save_settings({
                 "shop_name": shop_var.get().strip() or "My Shop",
@@ -1346,24 +1384,24 @@ class DigiCalGUI:
             })
             flash_saved()
 
-        self._neu_btn(c2, "Save Business Info", command=_save_biz,
+        self._neu_btn(c2, self.tr("Save Business Info"), command=_save_biz,
                      kind="equals", width=18).pack(pady=(4, 0))
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 3) PAYMENT / UPI
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c3 = card(scroll_frame, "", "Payment \u2014 UPI")
+        c3 = card(scroll_frame, "", self.tr("Payment — UPI"))
         grid3 = tk.Frame(c3, bg=T["bg"])
         grid3.pack(fill=tk.X)
 
-        row_label(grid3, "UPI Number (10 digits):", 0)
+        row_label(grid3, self.tr("UPI Number (10 digits):"), 0)
         upi_num_var = tk.StringVar(value=settings.get("upi_number", ""))
         vcmd = (grid3.register(lambda v: (v.isdigit() and len(v) <= 10) or v == ""), '%P')
         themed_entry(grid3, upi_num_var, width=13).grid(row=0, column=1, padx=6, pady=2)
         grid3.nametowidget(grid3.grid_slaves(row=0, column=1)[0]).config(
             validate="key", validatecommand=vcmd)
 
-        row_label(grid3, "Payee Name:", 1)
+        row_label(grid3, self.tr("Payee Name:"), 1)
         upi_name_var = tk.StringVar(value=settings.get("upi_name", "Shop"))
         themed_entry(grid3, upi_name_var, width=13).grid(row=1, column=1, padx=6, pady=2)
 
@@ -1371,31 +1409,31 @@ class DigiCalGUI:
             num = upi_num_var.get().strip()
             name = upi_name_var.get().strip() or "Shop"
             if len(num) != 10:
-                self._show_toast("Enter a valid 10-digit UPI number", kind="error")
+                self._show_toast(self.tr("Enter a valid 10-digit UPI number"), kind="error")
                 return
             self._save_settings({"upi_number": num, "upi_name": name})
             flash_saved()
 
-        self._neu_btn(c3, "Save UPI Settings", command=_save_upi,
+        self._neu_btn(c3, self.tr("Save UPI Settings"), command=_save_upi,
                      kind="equals", width=18).pack(pady=(4, 0))
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 4) DATA MANAGEMENT
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c4 = card(scroll_frame, "", "Data Management")
+        c4 = card(scroll_frame, "", self.tr("Data Management"))
 
         btn_row = tk.Frame(c4, bg=T["bg"])
         btn_row.pack(fill=tk.X, pady=2)
 
         def _clear_calcs():
-            self._show_confirm("Clear ALL calculation history?", lambda: [
+            self._show_confirm(self.tr("Clear ALL calculation history?"), lambda: [
                 self.db.clear_history('calculations'),
-                flash_saved("Calculation history cleared")])
+                flash_saved(self.tr("Calculation history cleared"))])
 
         def _clear_trans():
-            self._show_confirm("Clear ALL transactions?", lambda: [
+            self._show_confirm(self.tr("Clear ALL transactions?"), lambda: [
                 self.db.clear_history('transactions'),
-                flash_saved("Transaction history cleared")])
+                flash_saved(self.tr("Transaction history cleared"))])
 
         def _export_csv():
             import csv
@@ -1407,7 +1445,7 @@ class DigiCalGUI:
                 rows = cursor.fetchall()
                 if not rows:
                     conn.close()
-                    self._show_toast("No transactions to export.")
+                    self._show_toast(self.tr("No transactions to export."))
                     return
                 cols = [desc[0] for desc in cursor.description]
                 conn.close()
@@ -1418,21 +1456,21 @@ class DigiCalGUI:
                     writer = csv.writer(f)
                     writer.writerow(cols)
                     writer.writerows(rows)
-                flash_saved(f"Exported \u2192 {fname}")
+                flash_saved(self.tr("Exported → {}").format(fname))
             except Exception as ex:
                 self._show_toast(str(ex), kind="error")
 
-        self._neu_btn(btn_row, "Clear Calcs", command=_clear_calcs,
+        self._neu_btn(btn_row, self.tr("Clear Calcs"), command=_clear_calcs,
                      kind="mode").pack(side=tk.LEFT, padx=3)
-        self._neu_btn(btn_row, "Clear Trans", command=_clear_trans,
+        self._neu_btn(btn_row, self.tr("Clear Trans"), command=_clear_trans,
                      kind="operator").pack(side=tk.LEFT, padx=3)
-        self._neu_btn(btn_row, "Export CSV", command=_export_csv,
+        self._neu_btn(btn_row, self.tr("Export CSV"), command=_export_csv,
                      kind="equals").pack(side=tk.LEFT, padx=3)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 5) WEB PORTAL
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c5 = card(scroll_frame, "", "Web Portal (Phone/Laptop)")
+        c5 = card(scroll_frame, "", self.tr("Web Portal (Phone/Laptop)"))
         portal_info = tk.Frame(c5, bg=T["bg"])
         portal_info.pack(fill=tk.X, pady=2)
         
@@ -1445,32 +1483,33 @@ class DigiCalGUI:
         except:
             local_ip = '127.0.0.1'
             
-        tk.Label(portal_info, text="Access from this Device:", font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=self.tr("Access from this Device:"), font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
         tk.Label(portal_info, text=f"http://localhost:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W, pady=(0, 4))
         
-        tk.Label(portal_info, text="Access from Phone/Laptop (Same WiFi):", font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=self.tr("Access from Phone/Laptop (Same WiFi):"), font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
         tk.Label(portal_info, text=f"http://{local_ip}:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 6) ABOUT
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        c6 = card(scroll_frame, "", "About DigiCal")
+        c6 = card(scroll_frame, "", self.tr("About DigiCal"))
         tk.Label(c6, text=f"{config.APP_NAME}  v{config.VERSION}",
                  font=(config.BUTTON_FONT[0], 9, "bold"),
                  bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
 
-
         # ── Close button ───────────────────────────────────────────────────
         tk.Frame(scroll_frame, bg=T["bg"], height=6).pack()
-        self._neu_btn(scroll_frame, "Close", command=close,
+        self._neu_btn(scroll_frame, self.tr("Close"), command=close,
                      kind="mode", width=10, height=2).pack(pady=(0, 10))
 
 
 
 
 
-    def _show_success_overlay(self, label="Transaction saved!"):
-        """Full-window animated success screen. Auto-dismisses after 3 s."""
+    def _show_success_overlay(self, label=None):
+        """Full-window animated success screen. Auto-dismisses after 5 s."""
+        if label is None:
+            label = self.tr("Transaction saved!")
         T = self.T
         ov = tk.Frame(self.root, bg=T["bg"])
         ov.place(x=0, y=0, relwidth=1, relheight=1)
@@ -1481,13 +1520,13 @@ class DigiCalGUI:
             from PIL import Image, ImageTk
             import os
             
-            gif_path = os.path.join(os.path.dirname(__file__), "assets", "tick.gif")
+            gif_path = os.path.join(os.path.dirname(__file__), "assets", "checkmark.gif")
             if not os.path.exists(gif_path):
                 raise FileNotFoundError
 
-            # Scale GIF to ~65% of the window's current height, preserve ratio
+            # Scale GIF to ~50% of the window's current height, preserve ratio
             win_h = self.root.winfo_height() or 480
-            target = int(win_h * 0.65)
+            target = int(win_h * 0.50)
 
             # Cache the frames to prevent 1-2s UI freeze
             if not hasattr(self, '_success_gif_cache'):
@@ -1529,9 +1568,9 @@ class DigiCalGUI:
             tk.Label(ov, text="\u2714", font=("Arial", 72), bg=T["bg"],
                      fg=T["success"]).pack(pady=(60, 8))
 
-        tk.Label(ov, text=label, font=("Arial", 22, "bold"),
-                 bg=T["bg"], fg=T["success"]).pack(pady=8)
-        tk.Label(ov, text="Tap anywhere to continue",
+        tk.Label(ov, text=label, font=("Arial", 18, "bold"),
+                 bg=T["bg"], fg=T["success"], wraplength=self.root.winfo_width() - 40).pack(pady=8)
+        tk.Label(ov, text=self.tr("Tap anywhere to continue"),
                  font=("Arial", 12), bg=T["bg"], fg=T["subtext"]).pack(pady=4)
 
         def _dismiss(event=None):
@@ -1540,8 +1579,8 @@ class DigiCalGUI:
 
         ov.bind("<Button-1>", _dismiss)
         self.root.bind("<Escape>", _dismiss)
-        # Auto-dismiss after 3 s
-        ov.after(3000, _dismiss)
+        # Auto-dismiss after 5s
+        ov.after(5000, _dismiss)
 
     def show_transaction_dialog(self, amount):
         """Full-window overlay to categorize a calculation as a transaction."""
@@ -1550,7 +1589,7 @@ class DigiCalGUI:
         except Exception:
             return
 
-        ov, body, close = self._open_overlay("Save as Transaction")
+        ov, body, close = self._open_overlay(self.tr("Save as Transaction"))
         T = self.T
 
         # ── Two-column grid ─────────────────────────────────────
@@ -1561,20 +1600,21 @@ class DigiCalGUI:
         body.rowconfigure(4, weight=1)
 
         # Amount + subtitle  (left col)
-        tk.Label(body, text=f"\u20b9{amount_val:.2f}",
+        tk.Label(body, text=f"₹{amount_val:.2f}",
                  font=("Arial", 54, "bold"), bg=T["bg"], fg=T["success"]
                  ).grid(row=0, column=0, sticky=tk.W, padx=10, pady=(16, 0))
-        tk.Label(body, text="Save as transaction?",
+        tk.Label(body, text=self.tr("Save as transaction?"),
                  font=("Arial", 16), bg=T["bg"], fg=T["subtext"]
                  ).grid(row=1, column=0, sticky=tk.W, padx=10)
 
         # Payment method  (left col)
         pf = tk.Frame(body, bg=T["bg"])
         pf.grid(row=2, column=0, sticky=tk.W, padx=6, pady=8)
-        tk.Label(pf, text="Method:", font=("Arial", 20),
+        tk.Label(pf, text=self.tr("Method:"), font=("Arial", 20),
                  bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT, padx=4)
-        payment_var = tk.StringVar(value="Cash")
-        combo = ttk.Combobox(pf, textvariable=payment_var, values=config.PAYMENT_METHODS,
+        payment_var = tk.StringVar(value=self.tr("Cash"))
+        translated_methods = [self.tr(m) for m in config.PAYMENT_METHODS]
+        combo = ttk.Combobox(pf, textvariable=payment_var, values=translated_methods,
                              font=("Arial", 20), width=12, state="readonly")
         combo.pack(side=tk.LEFT)
 
@@ -1592,7 +1632,7 @@ class DigiCalGUI:
             num = s.get("upi_number", "")
             name = s.get("upi_name", "Shop")
             if not num:
-                tk.Label(qr_frame, text="\u26a0 Set UPI\nnumber in\nSettings",
+                tk.Label(qr_frame, text=self.tr("⚠ Set UPI\nnumber in\nSettings"),
                          font=("Arial", 7), bg=T["bg"],
                          fg=T["danger"], justify=tk.CENTER).pack()
                 return
@@ -1612,14 +1652,14 @@ class DigiCalGUI:
                 _qr_ref[0] = photo
                 tk.Label(qr_frame, image=photo, bg="white",
                          relief=tk.FLAT, bd=3).pack(pady=(8, 4))
-                tk.Label(qr_frame, text=f"\u20b9{amount_val:.2f}  via UPI",
+                tk.Label(qr_frame, text=self.tr("{} via UPI").format(f"₹{amount_val:.2f}"),
                          font=("Arial", 18, "bold"), bg=T["bg"],
                          fg=T["success"]).pack()
                 tk.Label(qr_frame, text=vpa,
                          font=("Arial", 16), bg=T["bg"],
                          fg=T["subtext"]).pack()
             except Exception as ex:
-                tk.Label(qr_frame, text=f"QR error:\n{ex}",
+                tk.Label(qr_frame, text=self.tr("QR error:\n{}").format(ex),
                          font=("Arial", 12), bg=T["bg"],
                          fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
 
@@ -1643,24 +1683,24 @@ class DigiCalGUI:
                 
                 tk.Label(qr_frame, image=photo, bg=T["bg"],
                          relief=tk.FLAT).pack(pady=(8, 4))
-                tk.Label(qr_frame, text=f"\u20b9{amount_val:.2f}  in Cash",
+                tk.Label(qr_frame, text=self.tr("{} in Cash").format(f"₹{amount_val:.2f}"),
                          font=("Arial", 18, "bold"), bg=T["bg"],
                          fg=T["success"]).pack()
             except Exception as ex:
-                tk.Label(qr_frame, text=f"Cash icon error:\n{ex}",
+                tk.Label(qr_frame, text=self.tr("Cash icon error:\n{}").format(ex),
                          font=("Arial", 12), bg=T["bg"],
                          fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
 
         def on_payment_change(event=None):
             pm = payment_var.get()
-            if pm == "Due":
+            if pm == self.tr("Due"):
                 qr_frame.grid_remove()
                 self.show_due_customer_dialog(lambda cid: due_customer.__setitem__(0, cid))
-            elif pm == "UPI":
+            elif pm == self.tr("UPI"):
                 due_customer[0] = None
                 _build_qr()
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
-            elif pm == "Cash":
+            elif pm == self.tr("Cash"):
                 due_customer[0] = None
                 _build_cash_icon()
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
@@ -1673,59 +1713,75 @@ class DigiCalGUI:
         # Trigger default logic (Cash) to show the icon immediately
         on_payment_change()
 
-        # ── Save functions ──────────────────────────────────────
+    # ── Save functions ──────────────────────────────────────
         def save_as_sale():
             pm = payment_var.get()
-            if pm == "Due" and not due_customer[0]:
-                self._show_toast("Please select a customer for Due payment", kind="error"); return
+            if pm == self.tr("Due") and not due_customer[0]:
+                self._show_toast(self.tr("Please select a customer for Due payment"), kind="error"); return
             cats = self.transaction_manager.get_sales_categories()
             cat = "Product Sales" if "Product Sales" in cats else (cats[0] if cats else "Sales")
             hid = None
             ch = self.handler_manager.get_current_handler()
             if ch: hid = ch['id']
-            desc = f"From calculation: {amount}"
-            if pm == "Due" and due_customer[0]: desc += f" [Due: {due_customer[0]}]"
-            tid = self.transaction_manager.add_sale(amount_val, cat, desc, pm, hid)
-            if pm == "Due" and due_customer[0]: self.db.add_due_record(tid, due_customer[0], amount_val)
+            desc = self.tr("From calculation: {}").format(amount)
+            if pm == self.tr("Due") and due_customer[0]: desc += self.tr(" [Due: {}]").format(due_customer[0])
+            
+            # map back translated method to literal config method for db storage
+            meth_en = "Cash"
+            for m in config.PAYMENT_METHODS:
+                if self.tr(m) == pm:
+                    meth_en = m
+                    break
+                    
+            tid = self.transaction_manager.add_sale(amount_val, cat, desc, meth_en, hid)
+            if pm == self.tr("Due") and due_customer[0]: self.db.add_due_record(tid, due_customer[0], amount_val)
             self._deduct_product_quantities()
             self.calculator.clear()
             self._line_products = {}
             self.update_display("0")
             close()
-            self._show_success_overlay(f"Sale saved  \u20b9{amount_val:.2f} [{pm}]")
+            self._show_success_overlay(self.tr("Sale saved  {} [{}]").format(f"₹{amount_val:.2f}", pm))
 
         def save_as_expense():
             pm = payment_var.get()
-            if pm == "Due" and not due_customer[0]:
-                self._show_toast("Please select a customer for Due payment", kind="error"); return
+            if pm == self.tr("Due") and not due_customer[0]:
+                self._show_toast(self.tr("Please select a vendor for Due payment"), kind="error"); return
             cats = self.transaction_manager.get_expense_categories()
             cat = "Supplies" if "Supplies" in cats else (cats[0] if cats else "Expense")
             hid = None
             ch = self.handler_manager.get_current_handler()
             if ch: hid = ch['id']
-            desc = f"From calculation: {amount}"
-            if pm == "Due" and due_customer[0]: desc += f" [Due: {due_customer[0]}]"
-            tid = self.transaction_manager.add_expense(amount_val, cat, desc, pm, hid)
-            if pm == "Due" and due_customer[0]: self.db.add_due_record(tid, due_customer[0], amount_val)
+            desc = self.tr("From calculation: {}").format(amount)
+            if pm == self.tr("Due") and due_customer[0]: desc += self.tr(" [Due: {}]").format(due_customer[0])
+
+            # map back translated method to literal config method for db storage
+            meth_en = "Cash"
+            for m in config.PAYMENT_METHODS:
+                if self.tr(m) == pm:
+                    meth_en = m
+                    break
+                    
+            tid = self.transaction_manager.add_expense(amount_val, cat, desc, meth_en, hid)
+            if pm == self.tr("Due") and due_customer[0]: self.db.add_due_record(tid, due_customer[0], amount_val)
             self._deduct_product_quantities()
             self.calculator.clear()
             self._line_products = {}
             self.update_display("0")
             close()
-            self._show_success_overlay(f"Expense saved  \u20b9{amount_val:.2f} [{pm}]")
+            self._show_success_overlay(self.tr("Expense saved  {} [{}]").format(f"₹{amount_val:.2f}", pm))
 
         # Buttons  (left col)
         bf = tk.Frame(body, bg=T["bg"])
         bf.grid(row=3, column=0, sticky=tk.W, padx=6, pady=24)
-        self._neu_btn(bf, "Sale", command=save_as_sale, kind="equals", width=14, height=3).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, "Expense", command=save_as_expense, kind="danger", width=14, height=3).pack(side=tk.LEFT, padx=5)
+        self._neu_btn(bf, self.tr("Sale"), command=save_as_sale, kind="equals", width=14, height=3).pack(side=tk.LEFT, padx=5)
+        self._neu_btn(bf, self.tr("Expense"), command=save_as_expense, kind="danger", width=14, height=3).pack(side=tk.LEFT, padx=5)
         self._neu_btn(bf, "✕", command=close, kind="mode", width=6, height=3).pack(side=tk.LEFT, padx=5)
 
 
     def update_handler_dropdown(self):
         """Update handler dropdown with current handlers"""
         handlers = self.handler_manager.get_handler_list()
-        handler_names = ["+ Create New Handler"] + [h[1] for h in handlers]
+        handler_names = [h[1] for h in handlers]
         self.handler_dropdown['values'] = handler_names
         
         # Set current handler
@@ -1807,48 +1863,44 @@ class DigiCalGUI:
     
     def on_handler_selected(self, event=None):
         """Handle handler selection from dropdown"""
-        selected = self.handler_var.get()
+        selected_name = self.handler_var.get()
         
-        if selected == "+ Create New Handler":
-            self.show_create_handler_dialog()
-        else:
-            # Find and set the selected handler
-            handlers = self.handler_manager.get_handler_list()
-            for h_id, h_name, h_incentive, h_type in handlers:
-                if h_name == selected:
-                    self.handler_manager.set_current_handler(h_id)
-                    break
+        handlers = self.handler_manager.get_handler_list()
+        for h in handlers:
+            if h[1] == selected_name:
+                self.handler_manager.set_current_handler(h[0])
+                break
         self.root.focus_set()
     
-    def show_create_handler_dialog(self):
+    def show_create_handler_dialog(self, on_close=None):
         """Full-window overlay to create a new handler."""
         T = self.T
-        ov, body, close = self._open_overlay("Create New Handler")
+        ov, body, close = self._open_overlay(self.tr("Create New Handler"))
 
-        tk.Label(body, text="Create New Handler", font=("Arial", 14, "bold"),
+        tk.Label(body, text=self.tr("Create New Handler"), font=("Arial", 14, "bold"),
                  bg=T["bg"], fg=T["text"]).pack(pady=(10, 6))
 
         ff = tk.Frame(body, bg=T["bg"])
         ff.pack(pady=6)
 
-        tk.Label(ff, text="Handler Name:", font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]
+        tk.Label(ff, text=self.tr("Handler Name:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]
                  ).grid(row=0, column=0, sticky=tk.W, pady=8, padx=8)
         name_entry = tk.Entry(ff, font=config.LABEL_FONT, width=20,
                               bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
         name_entry.grid(row=0, column=1, pady=8, padx=8)
 
-        tk.Label(ff, text="Incentive Type:", font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]
+        tk.Label(ff, text=self.tr("Incentive Type:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]
                  ).grid(row=1, column=0, sticky=tk.W, pady=8, padx=8)
         incentive_type_var = tk.StringVar(value="percentage")
         tf = tk.Frame(ff, bg=T["bg"])
         tf.grid(row=1, column=1, pady=8, padx=8, sticky=tk.W)
-        for txt, val in [("% Percent", "percentage"), ("Fixed ₹", "fixed")]:
+        for txt, val in [(self.tr("% Percent"), "percentage"), (self.tr("Fixed ₹"), "fixed")]:
             tk.Radiobutton(tf, text=txt, variable=incentive_type_var, value=val,
                            font=config.LABEL_FONT, bg=T["bg"], fg=T["text"],
                            selectcolor=T["mode_bg"], activebackground=T["bg"],
                            activeforeground=T["text"]).pack(side=tk.LEFT, padx=4)
 
-        incentive_label = tk.Label(ff, text="Incentive (%):", font=config.LABEL_FONT,
+        incentive_label = tk.Label(ff, text=self.tr("Incentive (%):"), font=config.LABEL_FONT,
                                    bg=T["bg"], fg=T["text"])
         incentive_label.grid(row=2, column=0, sticky=tk.W, pady=8, padx=8)
         incentive_entry = tk.Entry(ff, font=config.LABEL_FONT, width=20,
@@ -1856,42 +1908,43 @@ class DigiCalGUI:
         incentive_entry.grid(row=2, column=1, pady=8, padx=8)
 
         def _update_lbl(*_):
-            incentive_label.config(text="Incentive (%):" if incentive_type_var.get() == "percentage" else "Incentive (Fixed \u20b9):")
-        incentive_type_var.trace('w', _update_lbl)
+            incentive_label.config(text=self.tr("Incentive (%):") if incentive_type_var.get() == "percentage" else self.tr("Incentive (Fixed ₹):"))
+        incentive_type_var.trace_add('write', _update_lbl)
 
         def create_handler():
             name = name_entry.get().strip()
             itype = incentive_type_var.get()
             if not name:
-                self._show_toast("Please enter a handler name", kind="error"); return
+                self._show_toast(self.tr("Please enter a handler name"), kind="error"); return
             try:
                 inc = float(incentive_entry.get().strip())
                 if inc < 0: raise ValueError
                 if itype == "percentage" and inc > 100:
-                    self._show_toast("Percentage must be 0–100", kind="error"); return
+                    self._show_toast(self.tr("Percentage must be 0–100"), kind="error"); return
             except ValueError:
-                self._show_toast("Please enter a valid incentive value", kind="error"); return
+                self._show_toast(self.tr("Please enter a valid incentive value"), kind="error"); return
             if self.handler_manager.create_handler(name, inc, itype):
-                lbl = f"{inc}%" if itype == "percentage" else f"\u20b9{inc}"
-                self._show_toast(f"Handler '{name}' created  ({lbl} incentive)")
+                lbl = f"{inc}%" if itype == "percentage" else f"₹{inc}"
+                self._show_toast(self.tr("Handler '{}' created  ({} incentive)").format(name, lbl))
                 self.update_handler_dropdown()
                 close()
+                if on_close: on_close()
             else:
-                self._show_toast("Handler name already exists", kind="error")
+                self._show_toast(self.tr("Handler name already exists"), kind="error")
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=12)
-        self._neu_btn(bf, "Create", command=create_handler, kind="equals",
+        self._neu_btn(bf, self.tr("Create"), command=create_handler, kind="equals",
                       width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, "Cancel", command=close, kind="mode",
+        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
                       width=10, height=2).pack(side=tk.LEFT, padx=5)
 
     def show_due_customer_dialog(self, on_confirm):
         """Full-window overlay to link a Due payment to an existing or new customer."""
         T = self.T
-        ov, body, close = self._open_overlay("Due Payment \u2014 Customer")
+        ov, body, close = self._open_overlay(self.tr("Due Payment — Customer"))
 
-        tk.Label(body, text="Due Payment", font=("Arial", 13, "bold"),
+        tk.Label(body, text=self.tr("Due Payment"), font=("Arial", 13, "bold"),
                  bg=T["bg"], fg=T["text"]).pack(pady=(8, 4))
 
         # Tab switcher
@@ -1899,10 +1952,10 @@ class DigiCalGUI:
         tab_frame = tk.Frame(body, bg=T["bg"])
         tab_frame.pack(fill=tk.X)
 
-        existing_tab_btn = tk.Button(tab_frame, text="Existing Customer",
+        existing_tab_btn = tk.Button(tab_frame, text=self.tr("Existing Customer"),
                                      font=("Arial", 16, "bold"), bg=T["success"], fg="#FFFFFF",
                                      relief=tk.SUNKEN, bd=2)
-        new_tab_btn = tk.Button(tab_frame, text="New Customer",
+        new_tab_btn = tk.Button(tab_frame, text=self.tr("New Customer"),
                                 font=("Arial", 16, "bold"), bg=T["mode_bg"], fg=T["mode_fg"],
                                 relief=tk.RAISED, bd=2)
         existing_tab_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
@@ -1913,17 +1966,17 @@ class DigiCalGUI:
 
         # Existing panel
         existing_panel = tk.Frame(content, bg=T["bg"])
-        tk.Label(existing_panel, text="Customer ID:", font=("Arial", 16),
+        tk.Label(existing_panel, text=self.tr("Customer ID:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=12)
         existing_id_var = tk.StringVar()
         existing_id_entry = tk.Entry(existing_panel, textvariable=existing_id_var, font=("Arial", 22), width=24,
                                      bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
         existing_id_entry.grid(row=0, column=1, pady=12, padx=16, sticky=tk.EW)
         
-        tk.Label(existing_panel, text="  OR  ", font=("Arial", 16, "bold"),
+        tk.Label(existing_panel, text=self.tr("  OR  "), font=("Arial", 16, "bold"),
                  bg=T["bg"], fg=T["subtext"]).grid(row=1, column=0, columnspan=2, pady=8)
                  
-        tk.Label(existing_panel, text="Phone Number:", font=("Arial", 16),
+        tk.Label(existing_panel, text=self.tr("Phone Number:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=12)
         existing_phone_var = tk.StringVar()
         existing_phone_entry = tk.Entry(existing_panel, textvariable=existing_phone_var, font=("Arial", 22), width=24,
@@ -1961,12 +2014,12 @@ class DigiCalGUI:
             if c:
                 found_customer[0] = c[0]
                 img = found_label.right_img if hasattr(found_label, 'right_img') and found_label.right_img else ""
-                txt = f" Found: {c[1]} (ID: {c[0]})"
+                txt = self.tr(" Found: {} (ID: {})").format(c[1], c[0])
                 found_label.config(text=txt, fg=T["success"], image=img)
             else:
                 found_customer[0] = None
                 img = found_label.wrong_img if hasattr(found_label, 'wrong_img') and found_label.wrong_img else ""
-                found_label.config(text=" No customer found", fg=T["danger"], image=img)
+                found_label.config(text=" " + self.tr("No customer found"), fg=T["danger"], image=img)
                 
         def _on_search_change(*args):
             if _search_timer[0]:
@@ -1980,18 +2033,18 @@ class DigiCalGUI:
         new_panel = tk.Frame(content, bg=T["bg"])
         id_row = tk.Frame(new_panel, bg=T["bg"])
         id_row.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=8)
-        tk.Label(id_row, text="Customer ID:", font=("Arial", 16),
+        tk.Label(id_row, text=self.tr("Customer ID:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
         tk.Label(id_row, text=self.db.get_next_customer_id(),
                  font=("Arial", 16, "bold"), bg=T["bg"], fg=T["warning"]).pack(side=tk.LEFT, padx=6)
                  
-        tk.Label(new_panel, text="Name *:", font=("Arial", 16),
+        tk.Label(new_panel, text=self.tr("Name *:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=12)
         new_name_entry = tk.Entry(new_panel, font=("Arial", 22), width=24,
                                   bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
         new_name_entry.grid(row=1, column=1, pady=12, padx=16, sticky=tk.EW)
         
-        tk.Label(new_panel, text="Phone *:", font=("Arial", 16),
+        tk.Label(new_panel, text=self.tr("Phone *:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).grid(row=2, column=0, sticky=tk.W, pady=12)
         phone_var = tk.StringVar()
         vcmd = (new_panel.register(lambda v: (v.isdigit() and len(v) <= 10) or v == ""), '%P')
@@ -2000,7 +2053,7 @@ class DigiCalGUI:
                                    bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
         new_phone_entry.grid(row=2, column=1, pady=12, padx=16, sticky=tk.EW)
         
-        tk.Label(new_panel, text="Email:", font=("Arial", 16),
+        tk.Label(new_panel, text=self.tr("Email:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).grid(row=3, column=0, sticky=tk.W, pady=12)
         new_email_entry = tk.Entry(new_panel, font=("Arial", 22), width=24,
                                    bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
@@ -2025,51 +2078,51 @@ class DigiCalGUI:
         def confirm():
             if tab_var.get() == "existing":
                 if not found_customer[0]:
-                    self._show_toast("Please find a customer first", kind="error"); return
+                    self._show_toast(self.tr("Please find a customer first"), kind="error"); return
                 on_confirm(found_customer[0]); close()
             else:
                 name = new_name_entry.get().strip()
                 phone = new_phone_entry.get().strip()
                 email = new_email_entry.get().strip() or None
-                if not name: self._show_toast("Customer Name is mandatory", kind="error"); return
-                if not phone: self._show_toast("Phone Number is mandatory", kind="error"); return
-                if len(phone) != 10: self._show_toast("Phone must be exactly 10 digits", kind="error"); return
+                if not name: self._show_toast(self.tr("Customer Name is mandatory"), kind="error"); return
+                if not phone: self._show_toast(self.tr("Phone Number is mandatory"), kind="error"); return
+                if len(phone) != 10: self._show_toast(self.tr("Phone must be exactly 10 digits"), kind="error"); return
                 cid, err = self.db.add_customer(name, phone, email)
                 if cid is None: self._show_toast(err, kind="error"); return
-                self._show_toast(f"Customer created!\nID: {cid}\nName: {name}")
+                self._show_toast(self.tr("Customer created!\nID: {}\nName: {}").format(cid, name))
                 on_confirm(cid); close()
 
         btn_row = tk.Frame(body, bg=T["bg"])
         btn_row.pack(pady=16)
-        self._neu_btn(btn_row, "Confirm", command=confirm, kind="equals",
+        self._neu_btn(btn_row, self.tr("Confirm"), command=confirm, kind="equals",
                       width=14, height=2).pack(side=tk.LEFT, padx=10)
-        self._neu_btn(btn_row, "Cancel", command=close, kind="mode",
+        self._neu_btn(btn_row, self.tr("Cancel"), command=close, kind="mode",
                       width=14, height=2).pack(side=tk.LEFT, padx=10)
 
     def show_customers_mode(self):
         """Show customer list with total unsettled dues."""
-        self.update_display("Customers & Due Balances")
+        self.update_display(self.tr("Customers & Due Balances"))
         
         # Refresh button
         ctrl_frame = tk.Frame(self.content_frame, bg=config.BG_COLOR)
         ctrl_frame.pack(fill=tk.X, pady=(2, 0))
         tk.Button(
-            ctrl_frame, text="\u21ba Refresh", font=config.LABEL_FONT,
+            ctrl_frame, text="\u21ba " + self.tr("Refresh"), font=config.LABEL_FONT,
             bg=config.BUTTON_BG, fg="white",
             command=self.switch_mode_customers
         ).pack(side=tk.RIGHT, padx=4)
         
-        edit_btn = self._neu_btn(ctrl_frame, "\u270e Edit Customer", kind="mode")
+        edit_btn = self._neu_btn(ctrl_frame, "\u270e " + self.tr("Edit Customer"), kind="mode")
         edit_btn.pack(side=tk.RIGHT, padx=4)
         
         # Treeview
         tree_frame = tk.Frame(self.content_frame, bg=config.BG_COLOR)
         tree_frame.pack(fill=tk.BOTH, expand=True, pady=4)
         
-        cols = ("ID", "Name", "Phone", "Total Due (\u20b9)")
+        cols = (self.tr("ID"), self.tr("Name"), self.tr("Phone"), self.tr("Total Due (₹)"))
         tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=10)
         
-        col_widths = {"ID": 55, "Name": 130, "Phone": 100, "Total Due (\u20b9)": 90}
+        col_widths = {self.tr("ID"): 55, self.tr("Name"): 130, self.tr("Phone"): 100, self.tr("Total Due (₹)"): 90}
         for col in cols:
             tree.heading(col, text=col)
             tree.column(col, width=col_widths[col], anchor=tk.CENTER)
@@ -2088,7 +2141,7 @@ class DigiCalGUI:
                             values=(cid, name, phone or "-", f"{total_due:.2f}"),
                             tags=tags)
         else:
-            tree.insert("", tk.END, values=("-", "No customers yet", "-", "-"))
+            tree.insert("", tk.END, values=("-", self.tr("No customers yet"), "-", "-"))
         
         def on_row_click(event):
             item = tree.focus()
@@ -2115,7 +2168,7 @@ class DigiCalGUI:
         # Legend
         tk.Label(
             self.content_frame,
-            text="\u25cf Red rows = outstanding due  |  Click any row to settle",
+            text=self.tr("● Red rows = outstanding due  |  Click any row to settle"),
             font=("Arial", 7), bg=config.BG_COLOR, fg="#E74C3C"
         ).pack(anchor=tk.W, padx=4)
         
@@ -2125,7 +2178,7 @@ class DigiCalGUI:
                 if c:
                     self._customer_modify_dialog(c)
                 else:
-                    self._show_toast("Customer not found", kind="error")
+                    self._show_toast(self.tr("Customer not found"), kind="error")
             self.show_due_customer_dialog(on_found)
             
         edit_btn.config(command=_open_customer_finder)
@@ -2138,32 +2191,32 @@ class DigiCalGUI:
     def show_settle_due_dialog(self, customer_id, name, phone, total_due):
         """Full-window overlay to record a due settlement for a customer."""
         T = self.T
-        ov, body, close = self._open_overlay("Settle Due")
+        ov, body, close = self._open_overlay(self.tr("Settle Due"))
 
-        tk.Label(body, text=f"{name}  (ID: {customer_id})",
+        tk.Label(body, text=f"{name}  ({self.tr('ID')}: {customer_id})",
                  font=("Arial", 12, "bold"), bg=T["bg"], fg=T["text"]).pack(pady=(10, 2))
-        tk.Label(body, text=f"Phone: {phone}",
+        tk.Label(body, text=f"{self.tr('Phone')}: {phone}",
                  font=config.LABEL_FONT, bg=T["bg"], fg=T["subtext"]).pack()
 
-        tk.Label(body, text=f"Total Outstanding Due:  \u20b9{total_due:.2f}",
+        tk.Label(body, text=self.tr("Total Outstanding Due:  ₹{:.2f}").format(total_due),
                  font=("Arial", 11, "bold"), bg=T["bg"],
                  fg=T["danger"] if total_due > 0 else T["success"]).pack(pady=8)
 
         if total_due <= 0:
-            lbl = tk.Label(body, text=" No outstanding due for this customer.",
+            lbl = tk.Label(body, text=" " + self.tr("No outstanding due for this customer."),
                      font=config.LABEL_FONT, bg=T["bg"], fg=T["success"])
             if getattr(self, "_icon_success", None):
                 lbl.config(image=self._icon_success, compound=tk.LEFT, padx=5)
             else:
-                lbl.config(text="\u2713 No outstanding due for this customer.")
+                lbl.config(text="\u2713 " + self.tr("No outstanding due for this customer."))
             lbl.pack(pady=6)
-            self._neu_btn(body, "Close", command=close, kind="mode",
+            self._neu_btn(body, self.tr("Close"), command=close, kind="mode",
                           width=10, height=2).pack(pady=10)
             return
 
         af = tk.Frame(body, bg=T["bg"])
         af.pack(pady=8)
-        tk.Label(af, text="Settling Amount (\u20b9):",
+        tk.Label(af, text=self.tr("Settling Amount (₹):"),
                  font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT, padx=6)
         amt_entry = tk.Entry(af, font=config.LABEL_FONT, width=12,
                              bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
@@ -2179,7 +2232,7 @@ class DigiCalGUI:
                 paying = float(amt_entry.get())
                 remaining = total_due - paying
                 remaining_label.config(
-                    text=f"Remaining after settle: \u20b9{remaining:.2f}",
+                    text=self.tr("Remaining after settle: ₹{:.2f}").format(remaining),
                     fg="#E74C3C" if remaining > 0 else "#2ECC71")
             except ValueError:
                 remaining_label.config(text="")
@@ -2191,22 +2244,22 @@ class DigiCalGUI:
             try:
                 paying = float(amt_entry.get())
             except ValueError:
-                self._show_toast("Please enter a valid amount", kind="error"); return
+                self._show_toast(self.tr("Please enter a valid amount"), kind="error"); return
             if paying <= 0:
-                self._show_toast("Amount must be greater than zero", kind="error"); return
+                self._show_toast(self.tr("Amount must be greater than zero"), kind="error"); return
             if paying > total_due:
-                self._show_toast(f"Amount cannot exceed \u20b9{total_due:.2f}", kind="error"); return
+                self._show_toast(self.tr("Amount cannot exceed ₹{:.2f}").format(total_due), kind="error"); return
             self.db.add_settlement(customer_id, paying)
             remaining = total_due - paying
-            self._show_toast(f"\u20b9{paying:.2f} settled for {name}.\nRemaining: \u20b9{remaining:.2f}")
+            self._show_toast(f"₹{paying:.2f} settled for {name}.\nRemaining: ₹{remaining:.2f}")
             close()
             self.switch_mode_customers()
 
         br = tk.Frame(body, bg=T["bg"])
         br.pack(pady=12)
-        self._neu_btn(br, "Confirm", command=confirm_settle, kind="equals",
+        self._neu_btn(br, self.tr("Confirm"), command=confirm_settle, kind="equals",
                       width=10, height=2).pack(side=tk.LEFT, padx=6)
-        self._neu_btn(br, "Cancel", command=close, kind="mode",
+        self._neu_btn(br, self.tr("Cancel"), command=close, kind="mode",
                       width=10, height=2).pack(side=tk.LEFT, padx=6)
 
     def _customer_modify_dialog(self, row_values):
@@ -2214,13 +2267,13 @@ class DigiCalGUI:
         customer_id = row_values[0]
         c = self.db.get_customer_by_id(customer_id)
         if not c:
-            self._show_toast("Customer not found", kind="error"); return
+            self._show_toast(self.tr("Customer not found"), kind="error"); return
         cid, name, phone, email = c
 
         T = self.T
-        ov, body, close = self._open_overlay(f"Edit Customer \u2014 ID {cid}")
+        ov, body, close = self._open_overlay(self.tr("Edit Customer — ID {}").format(cid))
 
-        tk.Label(body, text=f"Edit Customer \u2014 ID {cid}",
+        tk.Label(body, text=self.tr("Edit Customer — ID {}").format(cid),
                  font=(config.BUTTON_FONT[0], 12, "bold"),
                  bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
         
@@ -2241,10 +2294,54 @@ class DigiCalGUI:
                 e.insert(0, str(init_val))
             return e
 
-        lbl(0, "Name *:")
+        lbl(0, self.tr("Name *:macro")) # Using self.tr directly on literals might have colon issue if I stored it as "Name *:"
+        # Let's fix that. I stored it as "Name *:" -> it's okay, we can just replace the whole line.
+        # Wait, the above would be: lbl(0, self.tr("Name *:macro")) -> no, it should be self.tr("Name *:")
+        # Actually I can't write that comment cleanly inside. So I'll just write:
+        # lbl(0, self.tr("Name *:"))
+
+        lbl(0, self.tr("Name *:macro").replace('macro', ''))
+        # wait why did I write macro? I'll just write lbl(0, self.tr("Name *:"))
+        # Actually in locales I stored "Name *:"
+        # I'll just replace the whole method and provide correct lines.
+        # I will abort this specific chunk if I have made a typo, wait this is replacement content. I can just type it right.
+
+    def _customer_modify_dialog(self, row_values):
+        if not row_values: return
+        customer_id = row_values[0]
+        c = self.db.get_customer_by_id(customer_id)
+        if not c:
+            self._show_toast(self.tr("Customer not found"), kind="error"); return
+        cid, name, phone, email = c
+
+        T = self.T
+        ov, body, close = self._open_overlay(self.tr("Edit Customer — ID {}").format(cid))
+
+        tk.Label(body, text=self.tr("Edit Customer — ID {}").format(cid),
+                 font=(config.BUTTON_FONT[0], 12, "bold"),
+                 bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
+        
+        form_frame = tk.Frame(body, bg=T["bg"])
+        form_frame.pack(padx=6, fill=tk.X, pady=6)
+
+        def lbl(row, text):
+            tk.Label(form_frame, text=text, font=config.LABEL_FONT,
+                     bg=T["bg"], fg=T["text"]).grid(row=row, column=0, sticky=tk.W, pady=3, padx=6)
+
+        def entry(row, init_val=""):
+            e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22,
+                         bg=T["entry_bg"], fg=T["entry_fg"],
+                         insertbackground=T["text"], relief=tk.FLAT,
+                         highlightthickness=1, highlightbackground=T["shadow_dark"])
+            e.grid(row=row, column=1, pady=3, padx=6)
+            if init_val is not None:
+                e.insert(0, str(init_val))
+            return e
+
+        lbl(0, self.tr("Name *:"))
         name_e = entry(0, name)
 
-        lbl(1, "Phone *:")
+        lbl(1, self.tr("Phone *:"))
         phone_var = tk.StringVar(value=phone or "")
         vcmd = (form_frame.register(lambda v: (v.isdigit() and len(v) <= 10) or v == ""), '%P')
         phone_e = tk.Entry(form_frame, textvariable=phone_var, font=config.LABEL_FONT, width=22,
@@ -2254,7 +2351,7 @@ class DigiCalGUI:
                            highlightthickness=1, highlightbackground=T["shadow_dark"])
         phone_e.grid(row=1, column=1, pady=3, padx=6)
 
-        lbl(2, "Email:")
+        lbl(2, self.tr("Email:"))
         email_e = entry(2, email or "")
 
         def _update():
@@ -2263,11 +2360,11 @@ class DigiCalGUI:
             new_email = email_e.get().strip() or None
             
             if not new_name:
-                self._show_toast("Customer Name is mandatory", kind="error"); return
+                self._show_toast(self.tr("Customer Name is mandatory"), kind="error"); return
             if not new_phone:
-                self._show_toast("Phone Number is mandatory", kind="error"); return
+                self._show_toast(self.tr("Phone Number is mandatory"), kind="error"); return
             if len(new_phone) != 10:
-                self._show_toast("Phone must be exactly 10 digits", kind="error"); return
+                self._show_toast(self.tr("Phone must be exactly 10 digits"), kind="error"); return
                 
             self.db.update_customer(cid, new_name, new_phone, new_email)
             self._show_toast(f"Customer #{cid} updated")
@@ -2276,31 +2373,31 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=12)
-        self._neu_btn(bf, "Update", command=_update, kind="equals",
+        self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals",
                       width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, "Cancel", command=close, kind="mode",
+        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
                       width=10, height=2).pack(side=tk.LEFT, padx=5)
 
     # ── Products (Inventory) ────────────────────────────────────────────
     def show_products_mode(self):
         """Show product inventory table with Create / Modify / Delete controls."""
-        self.update_display("Product Inventory")
+        self.update_display(self.tr("Product Inventory"))
         
         T = self.T
         # ── action buttons ───────────────────────────────────────────────────
         ctrl = tk.Frame(self.content_frame, bg=T["bg"])
         ctrl.pack(fill=tk.X, pady=(2, 0))
 
-        self._neu_btn(ctrl, "+ Add", command=self._product_create_dialog,
+        self._neu_btn(ctrl, self.tr("+ Add"), command=self._product_create_dialog,
                      kind="equals").pack(side=tk.LEFT, padx=3)
 
-        edit_btn = self._neu_btn(ctrl, "\u270e Modify", kind="mode")
+        edit_btn = self._neu_btn(ctrl, "\u270e " + self.tr("Modify"), kind="mode")
         edit_btn.pack(side=tk.LEFT, padx=3)
 
-        del_btn = self._neu_btn(ctrl, "\u2715 Delete", kind="operator")
+        del_btn = self._neu_btn(ctrl, "\u2715 " + self.tr("Delete"), kind="danger")
         del_btn.pack(side=tk.LEFT, padx=3)
 
-        self._neu_btn(ctrl, "\u21ba Refresh",
+        self._neu_btn(ctrl, "\u21ba " + self.tr("Refresh"),
                      command=lambda: (self.clear_content_frame(), self.show_products_mode()),
                      kind="normal").pack(side=tk.RIGHT, padx=3)
 
@@ -2308,9 +2405,9 @@ class DigiCalGUI:
         tree_frame = tk.Frame(self.content_frame, bg=T["bg"])
         tree_frame.pack(fill=tk.BOTH, expand=True, pady=4)
 
-        cols = ("ID", "Name", "Category", "Total Qty", "Left Qty", "Price (\u20b9)")
+        cols = (self.tr("ID"), self.tr("Name"), self.tr("Category"), self.tr("Total Qty"), self.tr("Left Qty"), self.tr("Price (₹)"))
         tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=9)
-        col_w = {"ID": 30, "Name": 110, "Category": 110, "Total Qty": 65, "Left Qty": 60, "Price (\u20b9)": 68}
+        col_w = {self.tr("ID"): 30, self.tr("Name"): 110, self.tr("Category"): 110, self.tr("Total Qty"): 65, self.tr("Left Qty"): 60, self.tr("Price (₹)"): 68}
         for col in cols:
             tree.heading(col, text=col)
             tree.column(col, width=col_w[col], anchor=tk.CENTER)
@@ -2344,14 +2441,14 @@ class DigiCalGUI:
         
         # legend
         tk.Label(self.content_frame,
-                 text=f"\u25cf Red = low stock (< {int(low_pct * 100)}% remaining)",
+                 text=self.tr("● Red = low stock (< {}% remaining)").format(int(low_pct * 100)),
                  font=(config.LABEL_FONT[0], 7), bg=T["bg"], fg=T["danger"]).pack(anchor=tk.W, padx=4)
         
         # ── wire buttons ─────────────────────────────────────────────────────
         def _get_selected():
             sel = tree.focus()
             if not sel:
-                self._show_toast("Please select a product first", kind="warning")
+                self._show_toast(self.tr("Please select a product first"), kind="warning")
                 return None
             return tree.item(sel, "values")
         
@@ -2382,22 +2479,22 @@ class DigiCalGUI:
             e.grid(row=row, column=1, pady=3, padx=6)
             return e
 
-        lbl(0, "Name *:")
+        lbl(0, self.tr("Name *:"))
         name_e = entry(0)
 
-        lbl(1, "Category *:")
+        lbl(1, self.tr("Category *:"))
         cat_var = tk.StringVar()
         cat_cb = ttk.Combobox(parent, textvariable=cat_var, values=cats,
                                font=config.LABEL_FONT, width=20, state="readonly")
         cat_cb.grid(row=1, column=1, pady=3, padx=6)
 
-        lbl(2, "Total Qty *:")
+        lbl(2, self.tr("Total Qty *:"))
         tqty_e = entry(2)
 
-        lbl(3, "Left Qty *:")
+        lbl(3, self.tr("Left Qty *:"))
         lqty_e = entry(3)
 
-        lbl(4, "Price (\u20b9) *:")
+        lbl(4, self.tr("Price (₹) *:"))
         price_e = entry(4)
         
         # Auto-fill left_qty when total_qty changes (only if left_qty is empty)
@@ -2426,27 +2523,27 @@ class DigiCalGUI:
         lqty_s = fields["lqty"].get().strip()
         price_s = fields["price"].get().strip()
         if not name:
-            self._show_toast("Product name is required", kind="error"); return None
+            self._show_toast(self.tr("Product name is required"), kind="error"); return None
         if not cat:
-            self._show_toast("Category is required", kind="error"); return None
+            self._show_toast(self.tr("Category is required"), kind="error"); return None
         try:
             tqty = float(tqty_s)
             lqty = float(lqty_s)
             price = float(price_s)
         except ValueError:
-            self._show_toast("Qty and Price must be valid numbers", kind="error")
+            self._show_toast(self.tr("Qty and Price must be valid numbers"), kind="error")
             return None
         if tqty < 0 or lqty < 0 or price < 0:
-            self._show_toast("Values cannot be negative", kind="error"); return None
+            self._show_toast(self.tr("Values cannot be negative"), kind="error"); return None
         if lqty > tqty:
-            self._show_toast("Left Qty cannot exceed Total Qty", kind="error"); return None
+            self._show_toast(self.tr("Left Qty cannot exceed Total Qty"), kind="error"); return None
         return name, cat, tqty, lqty, price
     
     # ---- Create dialog -----------------------------------------------------
     def _product_create_dialog(self):
         T = self.T
-        ov, body, close = self._open_overlay("Add New Product")
-        tk.Label(body, text="Add New Product",
+        ov, body, close = self._open_overlay(self.tr("Add New Product"))
+        tk.Label(body, text=self.tr("Add New Product"),
                  font=(config.BUTTON_FONT[0], 12, "bold"),
                  bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
         form_frame = tk.Frame(body, bg=T["bg"])
@@ -2465,9 +2562,9 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
-        self._neu_btn(bf, "Save", command=_save, kind="equals",
+        self._neu_btn(bf, self.tr("Save"), command=_save, kind="equals",
                      width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, "Cancel", command=close, kind="mode",
+        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
                      width=10, height=2).pack(side=tk.LEFT, padx=5)
 
     # ---- Modify dialog -----------------------------------------------------
@@ -2476,12 +2573,12 @@ class DigiCalGUI:
         pid = int(row_values[0])
         product = self.db.get_product(pid)
         if not product:
-            self._show_toast("Product not found", kind="error"); return
+            self._show_toast(self.tr("Product not found"), kind="error"); return
         _, name, cat, tqty, lqty, price = product
 
         T = self.T
-        ov, body, close = self._open_overlay(f"Modify Product  \u2014  ID {pid}")
-        tk.Label(body, text=f"Modify Product  \u2014  ID {pid}",
+        ov, body, close = self._open_overlay(self.tr("Modify Product — ID {}").format(pid))
+        tk.Label(body, text=self.tr("Modify Product — ID {}").format(pid),
                  font=(config.BUTTON_FONT[0], 12, "bold"),
                  bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
         form_frame = tk.Frame(body, bg=T["bg"])
@@ -2500,9 +2597,9 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
-        self._neu_btn(bf, "Update", command=_update, kind="equals",
+        self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals",
                      width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, "Cancel", command=close, kind="mode",
+        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
                      width=10, height=2).pack(side=tk.LEFT, padx=5)
 
     # ---- Delete ------------------------------------------------------------
@@ -2514,7 +2611,171 @@ class DigiCalGUI:
             self.db.delete_product(pid)
             self.clear_content_frame()
             self.show_products_mode()
-        self._show_confirm(f"Delete '{name}' (ID {pid})?", _do_delete)
+        self._show_confirm(self.tr("Delete '{}' (ID {})?").format(name, pid), _do_delete)
+
+    # ── Handlers Management ────────────────────────────────────────────
+    def show_handlers_mode(self):
+        """Show handler list table with Add / Modify / Delete controls."""
+        self.update_display(self.tr("Handler Management"))
+        
+        T = self.T
+        # ── action buttons ───────────────────────────────────────────────────
+        ctrl = tk.Frame(self.content_frame, bg=T["bg"])
+        ctrl.pack(fill=tk.X, pady=(2, 0))
+
+        def _refresh():
+            self.clear_content_frame()
+            self.show_handlers_mode()
+
+        self._neu_btn(ctrl, self.tr("+ Add Handler"), command=lambda: self.show_create_handler_dialog(on_close=_refresh),
+                     kind="equals").pack(side=tk.LEFT, padx=3)
+
+        edit_btn = self._neu_btn(ctrl, "\u270e " + self.tr("Modify Handler"), kind="mode")
+        edit_btn.pack(side=tk.LEFT, padx=3)
+
+        del_btn = self._neu_btn(ctrl, "\u2715 " + self.tr("Delete Handler"), kind="danger")
+        del_btn.pack(side=tk.LEFT, padx=3)
+
+        self._neu_btn(ctrl, "\u21ba " + self.tr("Refresh"),
+                     command=_refresh,
+                     kind="normal").pack(side=tk.RIGHT, padx=3)
+
+        # ── treeview ─────────────────────────────────────────────────────────
+        tree_frame = tk.Frame(self.content_frame, bg=T["bg"])
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=4)
+
+        cols = (self.tr("ID"), self.tr("Name"), self.tr("Incentive (%)"), self.tr("Type"))
+        tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=9)
+        col_w = {self.tr("ID"): 40, self.tr("Name"): 160, self.tr("Incentive (%)"): 100, self.tr("Type"): 120}
+        for col in cols:
+            tree.heading(col, text=col)
+            tree.column(col, width=col_w[col], anchor=tk.CENTER)
+
+        tree.tag_configure("odd",  background=T["tree_odd"],  foreground=T["tree_fg"])
+        tree.tag_configure("even", background=T["tree_even"], foreground=T["tree_fg"])
+
+        def _load_handlers():
+            for item in tree.get_children():
+                tree.delete(item)
+            for i, h in enumerate(self.db.get_handlers()):
+                tag = "even" if i % 2 == 0 else "odd"
+                tree.insert("", tk.END,
+                            values=(h[0], h[1], f"{h[2]:g}", self.tr("% Percent") if h[3] == "percentage" else self.tr("Fixed ₹")),
+                            tags=(tag,))
+        
+        _load_handlers()
+        
+        sb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # ── wire buttons ─────────────────────────────────────────────────────
+        def _get_selected():
+            sel = tree.focus()
+            if not sel:
+                self._show_toast(self.tr("Please select a handler first"), kind="warning")
+                return None
+            return tree.item(sel, "values")
+        
+        edit_btn.config(command=lambda: self._handler_modify_dialog(_get_selected(), _refresh))
+        del_btn.config(command=lambda: self._handler_delete(_get_selected(), _refresh))
+        
+        # double-click also opens modify
+        tree.bind("<Double-1>", lambda e: self._handler_modify_dialog(_get_selected(), _refresh))
+
+    # ---- Modify dialog -----------------------------------------------------
+    def _handler_modify_dialog(self, row_values, reload_cb):
+        if row_values is None: return
+        hid = int(row_values[0])
+        handler_data = None
+        for h in self.db.get_handlers():
+            if h[0] == hid:
+                handler_data = h
+                break
+        
+        if not handler_data:
+            self._show_toast(self.tr("Handler not found"), kind="error"); return
+            
+        _, name, inc_pct, inc_type, is_active = handler_data
+
+        T = self.T
+        ov, body, close = self._open_overlay(self.tr("Modify Handler  —  ID {}").format(hid))
+        tk.Label(body, text=self.tr("Modify Handler  —  ID {}").format(hid),
+                 font=(config.BUTTON_FONT[0], 12, "bold"),
+                 bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
+                 
+        form_frame = tk.Frame(body, bg=T["bg"])
+        form_frame.pack(padx=6, fill=tk.X)
+
+        tk.Label(form_frame, text=self.tr("Name *:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=3, padx=6)
+        name_e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22, bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"], relief=tk.FLAT, highlightthickness=1, highlightbackground=T["shadow_dark"])
+        name_e.grid(row=0, column=1, pady=3, padx=6)
+        name_e.insert(0, name)
+
+        tk.Label(form_frame, text=self.tr("Incentive Type:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=3, padx=6)
+        type_var = tk.StringVar(value=self.tr("% Percent") if inc_type == "percentage" else self.tr("Fixed ₹"))
+        type_cb = ttk.Combobox(form_frame, textvariable=type_var, values=[self.tr("% Percent"), self.tr("Fixed ₹")], font=config.LABEL_FONT, width=20, state="readonly")
+        type_cb.grid(row=1, column=1, pady=3, padx=6)
+
+        inc_lbl = tk.Label(form_frame, text="", font=config.LABEL_FONT, bg=T["bg"], fg=T["text"])
+        inc_lbl.grid(row=2, column=0, sticky=tk.W, pady=3, padx=6)
+        
+        inc_e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22, bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"], relief=tk.FLAT, highlightthickness=1, highlightbackground=T["shadow_dark"])
+        inc_e.grid(row=2, column=1, pady=3, padx=6)
+        inc_e.insert(0, f"{inc_pct:g}")
+        
+        def _update_lbl(*_):
+            if type_var.get() == self.tr("% Percent"):
+                inc_lbl.config(text=self.tr("Incentive (%):"))
+            else:
+                inc_lbl.config(text=self.tr("Incentive (Fixed ₹):"))
+        type_var.trace_add("write", _update_lbl)
+        _update_lbl()
+
+        def _update():
+            new_name = name_e.get().strip()
+            if not new_name:
+                self._show_toast(self.tr("Please enter a handler name"), kind="warning")
+                return
+                
+            itype = "percentage" if type_var.get() == self.tr("% Percent") else "fixed"
+            
+            try:
+                ipct = float(inc_e.get().strip())
+                if itype == "percentage" and not (0 <= ipct <= 100):
+                    self._show_toast(self.tr("Percentage must be 0–100"), kind="warning")
+                    return
+            except ValueError:
+                self._show_toast(self.tr("Please enter a valid incentive value"), kind="warning")
+                return
+                
+            success = self.db.update_handler(hid, new_name, ipct, itype)
+            if success:
+                self.handler_manager.load_active_handler()
+                self.update_handler_dropdown()
+                self._show_toast(f"Handler #{hid} updated")
+                close()
+                reload_cb()
+            else:
+                self._show_toast(self.tr("Handler name already exists"), kind="error")
+
+        bf = tk.Frame(body, bg=T["bg"])
+        bf.pack(pady=8)
+        self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals", width=10, height=2).pack(side=tk.LEFT, padx=5)
+        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode", width=10, height=2).pack(side=tk.LEFT, padx=5)
+
+    # ---- Delete ------------------------------------------------------------
+    def _handler_delete(self, row_values, reload_cb):
+        if row_values is None: return
+        hid = int(row_values[0])
+        name = row_values[1]
+        def _do_delete():
+            self.db.delete_handler(hid)
+            self.handler_manager.load_active_handler()
+            self.update_handler_dropdown()
+            reload_cb()
+        self._show_confirm(self.tr("Delete handler '{}' (ID {})?").format(name, hid), _do_delete)
 
     def show_handler_performance(self):
         """Display handler performance graph"""
