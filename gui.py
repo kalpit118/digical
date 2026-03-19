@@ -8,14 +8,147 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from datetime import datetime
 import json
 import os
+import subprocess
+import platform
+import threading
 import config
 import locales
+from PIL import Image, ImageTk, ImageOps
 from calculator import Calculator
 from database import Database
 from transaction_manager import TransactionManager
 from history_manager import HistoryManager
 from graph_generator import GraphGenerator
 from handler_manager import HandlerManager
+
+class SystemPanel:
+    """Displays system status icons (Battery, Wifi, Bluetooth) in the header."""
+    def __init__(self, parent, theme, is_dark=False):
+        self.parent = parent
+        self.T = theme
+        self.is_dark = is_dark
+        self.frame = tk.Frame(parent, bg=self.T["hdr_bg"])
+        self.frame.pack(side=tk.RIGHT, padx=5)
+
+        # Icons (Battery, Wifi, Bluetooth from right to left)
+        self.battery_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
+        self.battery_label.pack(side=tk.RIGHT, padx=2)
+
+        self.wifi_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
+        self.wifi_label.pack(side=tk.RIGHT, padx=2)
+
+        self.bluetooth_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
+        self.bluetooth_label.pack(side=tk.RIGHT, padx=2)
+
+        self.time_label = tk.Label(self.frame, font=(config.LABEL_FONT[0], 9, "bold"), 
+                                   bg=self.T["hdr_bg"], fg=self.T["text"])
+        self.time_label.pack(side=tk.RIGHT, padx=(2, 5))
+
+        self.icons = {}
+        self._load_icons()
+
+        # Set initial default icons for instant startup
+        self.battery_label.config(image=self.icons.get("bat100"))
+        self.wifi_label.config(image=self.icons.get("wifi_off"))
+        self.bluetooth_label.config(image=self.icons.get("bt_off"))
+        self.time_label.config(text=datetime.now().strftime("%I:%M %p •"))
+        
+        self.refresh()
+
+    def _load_icons(self):
+        try:
+            base_dir = os.path.dirname(__file__)
+            header_assets = os.path.join(base_dir, "assets", "header")
+            _resample = getattr(Image, 'Resampling', Image).LANCZOS
+            size = (18, 18)
+
+            icon_files = {
+                "wifi_on": "wifi_on.png", "wifi_off": "wifi_off.png",
+                "bt_on": "bluetooth_on.png", "bt_off": "bluetooth_off.png",
+                "bat0": "battery0.png", "bat10": "battery10.png",
+                "bat50": "battery50.png", "bat90": "battery90.png", "bat100": "battery100.png"
+            }
+
+            for key, filename in icon_files.items():
+                path = os.path.join(header_assets, filename)
+                if os.path.exists(path):
+                    img = Image.open(path).convert("RGBA").resize(size, _resample)
+                    if self.is_dark:
+                        # Invert RGB while preserving Alpha
+                        r, g, b, a = img.split()
+                        rgb = Image.merge("RGB", (r, g, b))
+                        inv_rgb = ImageOps.invert(rgb)
+                        r2, g2, b2 = inv_rgb.split()
+                        img = Image.merge("RGBA", (r2, g2, b2, a))
+                    self.icons[key] = ImageTk.PhotoImage(img)
+        except Exception as e:
+            print(f"Error loading system icons: {e}")
+
+    def refresh(self):
+        """Begin an asynchronous status update."""
+        if not self.frame.winfo_exists():
+            return
+        threading.Thread(target=self._fetch_status, daemon=True).start()
+        self.frame.after(10000, self.refresh) # Refresh every 10 seconds
+
+    def _fetch_status(self):
+        """Detect system info across platforms."""
+        is_win = platform.system() == "Windows"
+        
+        # 1. Battery
+        bat_key = "bat100"
+        try:
+            if is_win:
+                out = subprocess.check_output("wmic path win32_battery get estimatedchargeremaining /value", shell=True, text=True)
+                res = [l.split('=')[1] for l in out.splitlines() if '=' in l]
+                pct = int(res[0]) if res else 100
+            else:
+                with open("/sys/class/power_supply/BAT0/capacity", "r") as f:
+                    pct = int(f.read().strip())
+            
+            if pct <= 5: bat_key = "bat0"
+            elif pct <= 25: bat_key = "bat10"
+            elif pct <= 60: bat_key = "bat50"
+            elif pct <= 95: bat_key = "bat90"
+            else: bat_key = "bat100"
+        except: bat_key = "bat100"
+
+        # 2. Wifi
+        wifi_key = "wifi_off"
+        try:
+            if is_win:
+                out = subprocess.check_output("netsh interface show interface name=\"Wi-Fi\"", shell=True, text=True)
+                if "Connect state:        Connected" in out:
+                    wifi_key = "wifi_on"
+            else:
+                res = subprocess.check_output(["nmcli", "-t", "-f", "CONNECTIVITY", "connectivity"], text=True).strip()
+                if res in ["full", "limited"]: wifi_key = "wifi_on"
+        except: pass
+
+        # 3. Bluetooth
+        bt_key = "bt_off"
+        try:
+            if is_win:
+                # Use a broader filter for Bluetooth radio devices
+                cmd = "powershell -Command \"Get-PnpDevice -Class Bluetooth -Status OK | Where-Object { $_.FriendlyName -like '*Bluetooth*' -and $_.FriendlyName -notlike '*Enumerator*' } | Select-Object -First 1\""
+                res = subprocess.check_output(cmd, shell=True, text=True).strip()
+                if res: bt_key = "bt_on"
+            else:
+                res = subprocess.check_output("rfkill list bluetooth", shell=True, text=True)
+                if "soft blocked: no" in res.lower(): bt_key = "bt_on"
+        except: pass
+
+        # Update UI in main thread
+        now_time = datetime.now().strftime("%I:%M %p •")
+        self.frame.after(0, lambda: self._apply_icons(bat_key, wifi_key, bt_key, now_time))
+
+    def _apply_icons(self, bat, wifi, bt, time_str):
+        if not self.frame.winfo_exists():
+            return
+        if bat in self.icons: self.battery_label.config(image=self.icons[bat])
+        if wifi in self.icons: self.wifi_label.config(image=self.icons[wifi])
+        if bt in self.icons: self.bluetooth_label.config(image=self.icons[bt])
+        self.time_label.config(text=time_str)
 
 class DigiCalGUI:
     def __init__(self, root):
@@ -35,6 +168,19 @@ class DigiCalGUI:
         settings = self._load_settings()
         self.dark_mode: bool = settings.get("dark_mode", False)
         self.language = settings.get("language", "en")
+        
+        # Fullscreen initialization
+        self.fullscreen: bool = settings.get("fullscreen", False)
+        if self.fullscreen:
+            self.root.attributes("-fullscreen", True)
+            
+        # Bind F11 for convenience
+        self.root.bind("<F11>", lambda e: self._toggle_fullscreen(not self.fullscreen))
+        
+        # Pull font scale early and update global config tuples
+        self.font_scale = settings.get("font_scale", "Medium")
+        config.set_font_scale(self.font_scale)
+        
         self.tr = locales.get_translator(self.language)
         self.T: dict = config.get_theme(self.dark_mode)
         self._apply_ttk_styles()
@@ -61,8 +207,18 @@ class DigiCalGUI:
     def _save_settings(self, data):
         existing = self._load_settings()
         existing.update(data)
-        with open(self._SETTINGS_FILE, "w") as f:
-            json.dump(existing, f, indent=2)
+        try:
+            with open(self._SETTINGS_FILE, "w") as f:
+                json.dump(existing, f, indent=2)
+        except Exception:
+            pass
+
+    def _toggle_fullscreen(self, value: bool):
+        """Toggle fullscreen state and save to settings."""
+        self.fullscreen = value
+        self.root.attributes("-fullscreen", self.fullscreen)
+        self._save_settings({"fullscreen": self.fullscreen})
+        self.apply_theme()
 
     # ── Theme helpers ──────────────────────────────────────────────────────────
     def _apply_ttk_styles(self):
@@ -86,6 +242,12 @@ class DigiCalGUI:
         style.map("TCombobox",
                   fieldbackground=[("readonly", T["entry_bg"])],
                   foreground=[("readonly", T["entry_fg"])])
+                  
+        # Scale the dropdown listbox popout explicitly
+        self.root.option_add("*TCombobox*Listbox.font", config.LABEL_FONT)
+        self.root.option_add("*TCombobox*Listbox.background", T["entry_bg"])
+        self.root.option_add("*TCombobox*Listbox.foreground", T["entry_fg"])
+                  
         style.configure("Treeview",         background=T["tree_even"],
                         fieldbackground=T["tree_even"], foreground=T["tree_fg"],
                         rowheight=20, font=config.LABEL_FONT)
@@ -125,6 +287,13 @@ class DigiCalGUI:
         """Persist language setting and apply immediately."""
         self.language = lang_code
         self._save_settings({"language": lang_code})
+        self.apply_theme()
+
+    def _change_font_scale(self, scale_name: str):
+        """Persist scaled font tuple configuration"""
+        self.font_scale = scale_name
+        self._save_settings({"font_scale": scale_name})
+        config.set_font_scale(scale_name)
         self.apply_theme()
 
     def _neu_btn(self, parent, text, command=None, kind="normal", **kw):
@@ -223,14 +392,13 @@ class DigiCalGUI:
 
         # Left: Apps launcher button
         try:
-            from PIL import Image, ImageTk
-            import os
             base_dir = os.path.dirname(__file__)
             _app_img_path = os.path.join(base_dir, "assets", "apps.png")
-            _raw_img = Image.open(_app_img_path).resize((18, 18), Image.Resampling.LANCZOS)
+            _resample = getattr(Image, 'Resampling', Image).LANCZOS
+            _raw_img = Image.open(_app_img_path).resize((18, 18), _resample)
             self._apps_icon = ImageTk.PhotoImage(_raw_img)
-            self._icon_success = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "right.png")).resize((14, 14), Image.Resampling.LANCZOS))
-            self._icon_error = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "wrong.png")).resize((14, 14), Image.Resampling.LANCZOS))
+            self._icon_success = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "right.png")).resize((14, 14), _resample))
+            self._icon_error = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "wrong.png")).resize((14, 14), _resample))
         except Exception:
             self._apps_icon = None
             self._icon_success = None
@@ -254,19 +422,8 @@ class DigiCalGUI:
         )
         title_label.place(relx=0.49, rely=0.45, anchor=tk.CENTER)
 
-        # Right: handler dropdown
-        handler_frame = tk.Frame(self.top_frame, bg=T["hdr_bg"])
-        handler_frame.pack(side=tk.RIGHT, padx=2)
-        tk.Label(handler_frame, text="H:",
-                 font=(config.LABEL_FONT[0], 10, "bold"), bg=T["hdr_bg"], fg=T["subtext"]).pack(side=tk.LEFT, padx=2)
-        self.handler_var = tk.StringVar()
-        self.handler_dropdown = ttk.Combobox(handler_frame, textvariable=self.handler_var, 
-                                            state="readonly", width=12, font=config.LABEL_FONT)
-        self.handler_dropdown.pack(side=tk.RIGHT)
-        
-        self.update_handler_dropdown()
-        self.handler_dropdown.bind('<<ComboboxSelected>>', self.on_handler_selected)
-        self.update_handler_dropdown()
+        # Right: System Panel (Wifi, Bluetooth, Battery)
+        self.system_panel = SystemPanel(self.top_frame, self.T, is_dark=self.dark_mode)
 
         # Product quick-pick bar
         self.product_bar_frame = tk.Frame(self.root, bg=T["bg_dark"], height=36)
@@ -305,18 +462,32 @@ class DigiCalGUI:
         )
         self.display.pack(side=tk.TOP, fill=tk.X)
 
+        # Container for live calculation (right) and handler name (left)
+        self.live_info_frame = tk.Frame(self.display_frame, bg=T["display_bg"])
+        self.live_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=12, pady=0)
+        
+        self.handler_status_label = tk.Label(
+            self.live_info_frame, text="H: None",
+            font=("Consolas", 14, "bold"),
+            bg=T["display_bg"], fg=T["subtext"]
+        )
+        self.handler_status_label.pack(side=tk.LEFT)
+        
         self.live_display = tk.Label(
-            self.display_frame, text="",
+            self.live_info_frame, text="",
             font=("Consolas", 20, "bold"),
             bg=T["display_bg"], fg=T["subtext"],
-            anchor=tk.E, padx=12, pady=0
+            anchor=tk.E
         )
-        self.live_display.pack(side=tk.BOTTOM, fill=tk.X)
+        self.live_display.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+        self.update_handler_status()
 
         # Content area
 
         self.content_frame = tk.Frame(self.root, bg=T["bg"])
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=3)
+
 
     def clear_content_frame(self):
         """Clear the content frame"""
@@ -349,9 +520,9 @@ class DigiCalGUI:
                 w = getattr(self, attr, None)
                 if w and w.winfo_exists():
                     w.pack_forget()
-            # Restore live_display packing
-            self.live_display.pack_forget()
-            self.live_display.pack(side=tk.BOTTOM, fill=tk.X)
+            # Restore live_info_frame packing
+            self.live_info_frame.pack_forget()
+            self.live_info_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=12)
             self.content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=3)
             # ESC on any non-home mode returns to Calculator
             self.root.bind("<Escape>", lambda e: self.switch_mode("calculator"))
@@ -1164,7 +1335,8 @@ class DigiCalGUI:
             for label, icon_name, mode in apps:
                 try:
                     p = os.path.join(os.path.dirname(__file__), "assets", "menu", icon_name)
-                    img = Image.open(p).resize((80, 80), Image.Resampling.LANCZOS)
+                    _resample = getattr(Image, 'Resampling', Image).LANCZOS
+                    img = Image.open(p).resize((80, 80), _resample)
                     self._launcher_icons[mode] = ImageTk.PhotoImage(img)
                 except Exception:
                     self._launcher_icons[mode] = None
@@ -1275,7 +1447,7 @@ class DigiCalGUI:
             hdr = tk.Frame(c, bg=T["bg"])
             hdr.pack(fill=tk.X, padx=8, pady=(6, 2))
             tk.Label(hdr, text=f"{title}",
-                     font=(config.BUTTON_FONT[0], 10, "bold"),
+                     font=(config.BUTTON_FONT[0], config.BUTTON_FONT[1] - 2, "bold"),
                      bg=T["bg"], fg=T["mode_fg"]).pack(side=tk.LEFT)
             content = tk.Frame(c, bg=T["bg"])
             content.pack(fill=tk.X, padx=10, pady=(0, 8))
@@ -1294,7 +1466,7 @@ class DigiCalGUI:
                                                      sticky=tk.W, pady=2)
 
         # Status label for save confirmations
-        status_lbl = tk.Label(scroll_frame, text="", font=(config.LABEL_FONT[0], 8),
+        status_lbl = tk.Label(scroll_frame, text="", font=(config.LABEL_FONT[0], config.LABEL_FONT[1] - 3),
                               bg=T["bg"], fg=T["success"])
         status_lbl.pack(pady=(2, 0))
 
@@ -1333,6 +1505,35 @@ class DigiCalGUI:
         lang_combo.bind("<<ComboboxSelected>>", on_lang_change)
         lang_combo.pack(side=tk.RIGHT, padx=4)
 
+        # Font Scale Selection row
+        font_row = tk.Frame(c1, bg=T["bg"])
+        font_row.pack(fill=tk.X, pady=2)
+        tk.Label(font_row, text=self.tr("Font Size"),
+                 font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
+        font_options = [self.tr("Small"), self.tr("Medium"), self.tr("Large"), self.tr("Extra Large")]
+        
+        # Ensure scale default is localized initially for matching
+        fs_tr = self.tr(self.font_scale) 
+        if fs_tr not in font_options: fs_tr = self.tr("Medium")
+        
+        font_var = tk.StringVar(value=fs_tr)
+        
+        def on_font_change(event):
+            val = font_var.get()
+            # Map back to English config standard
+            if val == self.tr("Small"): scale = "Small"
+            elif val == self.tr("Large"): scale = "Large"
+            elif val == self.tr("Extra Large"): scale = "Extra Large"
+            else: scale = "Medium"
+            
+            if scale != self.font_scale:
+                self._change_font_scale(scale)
+                
+        font_combo = ttk.Combobox(font_row, textvariable=font_var, values=font_options,
+                                  state="readonly", width=12, font=config.LABEL_FONT)
+        font_combo.bind("<<ComboboxSelected>>", on_font_change)
+        font_combo.pack(side=tk.RIGHT, padx=4)
+
         dark_row = tk.Frame(c1, bg=T["bg"])
         dark_row.pack(fill=tk.X, pady=2)
         tk.Label(dark_row, text=self.tr("Dark Mode"),
@@ -1341,12 +1542,33 @@ class DigiCalGUI:
         icon_text = "   " + self.tr("OFF") if not self.dark_mode else "   " + self.tr("ON")
         tk.Checkbutton(
             dark_row, text=icon_text, variable=dark_var,
-            font=(config.BUTTON_FONT[0], 9),
+            font=(config.BUTTON_FONT[0], config.BUTTON_FONT[1] - 3),
             bg=T["bg"], fg=T["accent"],
             selectcolor=T["bg_dark"],
             activebackground=T["bg"], activeforeground=T["accent"],
             relief=tk.FLAT, bd=0,
             command=lambda: self._toggle_dark_mode(dark_var.get())
+        ).pack(side=tk.RIGHT, padx=4)
+
+        # Fullscreen Toggle
+        full_row = tk.Frame(c1, bg=T["bg"])
+        full_row.pack(fill=tk.X, pady=2)
+        tk.Label(full_row, text=self.tr("Fullscreen Mode"),
+                 font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
+        full_var = tk.BooleanVar(value=self.fullscreen)
+        full_icon_text = "   " + self.tr("OFF") if not self.fullscreen else "   " + self.tr("ON")
+        
+        def _on_full_toggle():
+            self._toggle_fullscreen(full_var.get())
+            
+        tk.Checkbutton(
+            full_row, text=full_icon_text, variable=full_var,
+            font=(config.BUTTON_FONT[0], config.BUTTON_FONT[1] - 3),
+            bg=T["bg"], fg=T["accent"],
+            selectcolor=T["bg_dark"],
+            activebackground=T["bg"], activeforeground=T["accent"],
+            relief=tk.FLAT, bd=0,
+            command=_on_full_toggle
         ).pack(side=tk.RIGHT, padx=4)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1477,7 +1699,7 @@ class DigiCalGUI:
         import socket
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(('10.255.255.255', 1))
+            s.connect(('8.8.8.8', 80))
             local_ip = s.getsockname()[0]
             s.close()
         except:
@@ -1663,14 +1885,12 @@ class DigiCalGUI:
                          font=("Arial", 12), bg=T["bg"],
                          fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
 
-        def _build_cash_icon():
+        def _build_method_icon(asset_name, label_text):
             for w in qr_frame.winfo_children():
                 w.destroy()
             try:
-                from PIL import Image, ImageTk
-                import os
-                cash_path = os.path.join(os.path.dirname(__file__), "assets", "cash.png")
-                raw = Image.open(cash_path)
+                img_path = os.path.join(os.path.dirname(__file__), "assets", asset_name)
+                raw = Image.open(img_path)
                 
                 # Resize proportionally to fit a similar 320x320 box as the QR code
                 raw_w, raw_h = raw.size
@@ -1683,26 +1903,28 @@ class DigiCalGUI:
                 
                 tk.Label(qr_frame, image=photo, bg=T["bg"],
                          relief=tk.FLAT).pack(pady=(8, 4))
-                tk.Label(qr_frame, text=self.tr("{} in Cash").format(f"₹{amount_val:.2f}"),
+                tk.Label(qr_frame, text=self.tr(label_text).format(f"₹{amount_val:.2f}"),
                          font=("Arial", 18, "bold"), bg=T["bg"],
                          fg=T["success"]).pack()
             except Exception as ex:
-                tk.Label(qr_frame, text=self.tr("Cash icon error:\n{}").format(ex),
+                tk.Label(qr_frame, text=self.tr("Image error:\n{}").format(ex),
                          font=("Arial", 12), bg=T["bg"],
                          fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
 
         def on_payment_change(event=None):
             pm = payment_var.get()
             if pm == self.tr("Due"):
-                qr_frame.grid_remove()
+                due_customer[0] = None
                 self.show_due_customer_dialog(lambda cid: due_customer.__setitem__(0, cid))
+                _build_method_icon("due.png", "{} as Due")
+                qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
             elif pm == self.tr("UPI"):
                 due_customer[0] = None
                 _build_qr()
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
             elif pm == self.tr("Cash"):
                 due_customer[0] = None
-                _build_cash_icon()
+                _build_method_icon("cash.png", "{} in Cash")
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
             else:
                 due_customer[0] = None
@@ -1778,20 +2000,15 @@ class DigiCalGUI:
         self._neu_btn(bf, "✕", command=close, kind="mode", width=6, height=3).pack(side=tk.LEFT, padx=5)
 
 
-    def update_handler_dropdown(self):
-        """Update handler dropdown with current handlers"""
-        handlers = self.handler_manager.get_handler_list()
-        handler_names = [h[1] for h in handlers]
-        self.handler_dropdown['values'] = handler_names
-        
-        # Set current handler
-        current_handler = self.handler_manager.get_current_handler()
-        if current_handler:
-            self.handler_var.set(current_handler['name'])
-        elif handler_names:
-            self.handler_var.set(handler_names[0])
     
-    # ── Product quick-pick bar helpers ────────────────────────────────────
+    def update_handler_status(self):
+        """Update the bottom-left handler status label"""
+        current = self.handler_manager.get_current_handler()
+        if current:
+            self.handler_status_label.config(text=f"H: {current['name']}")
+        else:
+            self.handler_status_label.config(text="H: None")
+
     def refresh_product_bar(self):
         """Reload the product combobox from the database."""
         products = self.db.get_products()   # (id, name, cat, tqty, lqty, price)
@@ -1861,16 +2078,6 @@ class DigiCalGUI:
         self._product_selection_counts = {}  # reset after deduction
         self.refresh_product_bar()           # reflect updated qty in picker
     
-    def on_handler_selected(self, event=None):
-        """Handle handler selection from dropdown"""
-        selected_name = self.handler_var.get()
-        
-        handlers = self.handler_manager.get_handler_list()
-        for h in handlers:
-            if h[1] == selected_name:
-                self.handler_manager.set_current_handler(h[0])
-                break
-        self.root.focus_set()
     
     def show_create_handler_dialog(self, on_close=None):
         """Full-window overlay to create a new handler."""
@@ -1925,8 +2132,7 @@ class DigiCalGUI:
                 self._show_toast(self.tr("Please enter a valid incentive value"), kind="error"); return
             if self.handler_manager.create_handler(name, inc, itype):
                 lbl = f"{inc}%" if itype == "percentage" else f"₹{inc}"
-                self._show_toast(self.tr("Handler '{}' created  ({} incentive)").format(name, lbl))
-                self.update_handler_dropdown()
+                self.update_handler_status()
                 close()
                 if on_close: on_close()
             else:
@@ -1992,8 +2198,9 @@ class DigiCalGUI:
             base_dir = os.path.dirname(__file__)
             r_path = os.path.join(base_dir, "assets", "right.png")
             w_path = os.path.join(base_dir, "assets", "wrong.png")
-            found_label.right_img = ImageTk.PhotoImage(Image.open(r_path).resize((20, 20), Image.Resampling.LANCZOS))
-            found_label.wrong_img = ImageTk.PhotoImage(Image.open(w_path).resize((20, 20), Image.Resampling.LANCZOS))
+            _resample = getattr(Image, 'Resampling', Image).LANCZOS
+            found_label.right_img = ImageTk.PhotoImage(Image.open(r_path).resize((20, 20), _resample))
+            found_label.wrong_img = ImageTk.PhotoImage(Image.open(w_path).resize((20, 20), _resample))
         except Exception:
             found_label.right_img = None
             found_label.wrong_img = None
@@ -2636,6 +2843,10 @@ class DigiCalGUI:
         del_btn = self._neu_btn(ctrl, "\u2715 " + self.tr("Delete Handler"), kind="danger")
         del_btn.pack(side=tk.LEFT, padx=3)
 
+        self._neu_btn(ctrl, "\u2713 " + self.tr("Set Handler"),
+                     command=lambda: self._handler_set_active(_get_selected()),
+                     kind="equals").pack(side=tk.LEFT, padx=3)
+
         self._neu_btn(ctrl, "\u21ba " + self.tr("Refresh"),
                      command=_refresh,
                      kind="normal").pack(side=tk.RIGHT, padx=3)
@@ -2753,7 +2964,7 @@ class DigiCalGUI:
             success = self.db.update_handler(hid, new_name, ipct, itype)
             if success:
                 self.handler_manager.load_active_handler()
-                self.update_handler_dropdown()
+                self.update_handler_status()
                 self._show_toast(f"Handler #{hid} updated")
                 close()
                 reload_cb()
@@ -2773,7 +2984,7 @@ class DigiCalGUI:
         def _do_delete():
             self.db.delete_handler(hid)
             self.handler_manager.load_active_handler()
-            self.update_handler_dropdown()
+            self.update_handler_status()
             reload_cb()
         self._show_confirm(self.tr("Delete handler '{}' (ID {})?").format(name, hid), _do_delete)
 
@@ -2785,3 +2996,15 @@ class DigiCalGUI:
         canvas = FigureCanvasTkAgg(fig, master=self.graph_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def _handler_set_active(self, row_values):
+        """Set the selected handler as active and update UI."""
+        if row_values is None:
+            return
+        
+        hid = int(row_values[0])
+        name = row_values[1]
+        
+        self.handler_manager.set_current_handler(hid)
+        self.update_handler_status()
+        self._show_toast(self.tr("Handler '{}' set as active").format(name))

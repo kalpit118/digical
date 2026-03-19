@@ -17,8 +17,8 @@ api_process = None
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # doesn't even have to be reachable
-        s.connect(('10.255.255.255', 1))
+        # Point to a public IP to force kernel to resolve a local NAT route
+        s.connect(('8.8.8.8', 80))
         IP = s.getsockname()[0]
         s.close()
     except Exception:

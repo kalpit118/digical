@@ -7,12 +7,42 @@ import os
 APP_NAME = "DigiCal Business Calculator"
 VERSION = "1.0.0"
 
-# Display Settings (Optimized for 720x480 Raspberry Pi Display - Landscape)
+# Base Font Definitions
+_BASE_DISPLAY = ("Consolas", 24, "bold")
+_BASE_BUTTON = ("Segoe UI", 12)
+_BASE_LABEL = ("Segoe UI", 11)
+
+# Active Display Settings (Mutable)
 WINDOW_WIDTH = 720
 WINDOW_HEIGHT = 480
-DISPLAY_FONT = ("Consolas", 24, "bold")   # LCD/segmented-style font
-BUTTON_FONT = ("Segoe UI", 12)
-LABEL_FONT = ("Segoe UI", 11)
+DISPLAY_FONT = list(_BASE_DISPLAY)
+BUTTON_FONT = list(_BASE_BUTTON)
+LABEL_FONT = list(_BASE_LABEL)
+
+def set_font_scale(scale: str):
+    """Adjusts all system fonts up or down based on a severity profile."""
+    global DISPLAY_FONT, BUTTON_FONT, LABEL_FONT
+    scales = {
+        "Small": -2,
+        "Medium": 0,
+        "Large": 2,
+        "Extra Large": 4
+    }
+    offset = scales.get(scale, 0)
+    
+    # Temporarily cast to lists to allow item assignment (tuples are immutable)
+    d_font_list = list(_BASE_DISPLAY)
+    b_font_list = list(_BASE_BUTTON)
+    l_font_list = list(_BASE_LABEL)
+    
+    d_font_list[1] += offset
+    b_font_list[1] += offset
+    l_font_list[1] += offset
+    
+    # Cast back to tuple since tkinter expects font tuple
+    DISPLAY_FONT = tuple(d_font_list)
+    BUTTON_FONT = tuple(b_font_list)
+    LABEL_FONT = tuple(l_font_list)
 
 # ── Neumorphic Palettes ────────────────────────────────────────────────────────
 

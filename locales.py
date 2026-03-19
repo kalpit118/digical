@@ -162,6 +162,7 @@ TRANSLATIONS = {
         "Modify Handler": "Modify Handler",
         "Modify Handler  —  ID {}": "Modify Handler  —  ID {}",
         "Delete Handler": "Delete Handler",
+        "Set Handler": "Set Handler",
         "Delete handler '{}' (ID {})?": "Delete handler '{}' (ID {})?",
         "Add Handler": "Add Handler",
         
@@ -191,8 +192,14 @@ TRANSLATIONS = {
         "Modify Product  —  ID {}": "Modify Product  —  ID {}",
         "Delete '{}' (ID {})?": "Delete '{}' (ID {})?",
         
-        # Language
-        "Language": "Language"
+        # Language & Appearance
+        "Language": "Language",
+        "Font Size": "Font Size",
+        "Small": "Small",
+        "Medium": "Medium",
+        "Large": "Large",
+        "Extra Large": "Extra Large",
+        "Fullscreen Mode": "Fullscreen Mode"
     },
     
     "mr": {
@@ -354,6 +361,7 @@ TRANSLATIONS = {
         "Modify Handler": "हाताळणारा सुधारित करा",
         "Modify Handler  —  ID {}": "हाताळणारा सुधारित करा — आयडी {}",
         "Delete Handler": "हाताळणारा काढून टाका",
+        "Set Handler": "सक्रिय करा",
         "Delete handler '{}' (ID {})?": "हाताळणारा '{}' (आयडी {}) काढून टाकायचा का?",
         "Add Handler": "हाताळणारा जोडा",
         
@@ -383,8 +391,14 @@ TRANSLATIONS = {
         "Modify Product  —  ID {}": "उत्पादन सुधारित करा — आयडी {}",
         "Delete '{}' (ID {})?": "'{}' (आयडी {}) काढून टाकायचे का?",
         
-        # Language
-        "Language": "भाषा"
+        # Language & Appearance
+        "Language": "भाषा",
+        "Font Size": "अक्षराचा आकार",
+        "Small": "लहान",
+        "Medium": "मध्यम",
+        "Large": "मोठा",
+        "Extra Large": "खूप मोठा",
+        "Fullscreen Mode": "फुलस्क्रीन मोड"
     },
     
     "hi": {
@@ -546,6 +560,7 @@ TRANSLATIONS = {
         "Modify Handler": "संचालक को संशोधित करें",
         "Modify Handler  —  ID {}": "संचालक को संशोधित करें — आईडी {}",
         "Delete Handler": "संचालक हटाएं",
+        "Set Handler": "सक्रिय करें",
         "Delete handler '{}' (ID {})?": "संचालक '{}' (आईडी {}) हटाएं?",
         "Add Handler": "संचालक जोड़ें",
         
@@ -575,8 +590,14 @@ TRANSLATIONS = {
         "Modify Product  —  ID {}": "उत्पाद को संशोधित करें — आईडी {}",
         "Delete '{}' (ID {})?": "हटाएं '{}' (आईडी {})?",
         
-        # Language
-        "Language": "भाषा"
+        # Language & Appearance
+        "Language": "भाषा",
+        "Font Size": "फ़ॉन्ट का आकार",
+        "Small": "छोटा",
+        "Medium": "मध्यम",
+        "Large": "बड़ा",
+        "Extra Large": "बहुत बड़ा",
+        "Fullscreen Mode": "फ़ुलस्क्रीन मोड"
     }
 }
 
