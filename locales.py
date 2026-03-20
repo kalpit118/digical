@@ -46,6 +46,9 @@ TRANSLATIONS = {
         "Access from this Device:": "Access from this Device:",
         "Access from Phone/Laptop (Same WiFi):": "Access from Phone/Laptop (Same WiFi):",
         "About DigiCal": "About DigiCal",
+        "Current Version:": "Current Version:",
+        "Build Date:": "Build Date:",
+        "Commit:": "Commit:",
         "Saved!": "Saved!",
         
         # Modes
@@ -442,6 +445,9 @@ TRANSLATIONS = {
         "No backup found to revert.": "परत येण्यासाठी कोणताही बॅकअप सापडला नाही.",
         "Backing up...": "बॅकअप घेत आहे...",
         "Applying...": "लागू करत आहे...",
+        "Current Version:": "सध्याची आवृत्ती:",
+        "Build Date:": "बिल्ड तारीख:",
+        "Commit:": "कमिट:",
         "Backup failed. Aborting.": "बॅकअप अयशस्वी. रद्द करत आहे."
     },
     
@@ -663,6 +669,9 @@ TRANSLATIONS = {
         "No backup found to revert.": "वापस लौटने के लिए कोई बैकअप नहीं मिला।",
         "Backing up...": "बैकअप लिया जा रहा है...",
         "Applying...": "लागू किया जा रहा है...",
+        "Current Version:": "वर्तमान संस्करण:",
+        "Build Date:": "बिल्ड तिथि:",
+        "Commit:": "कमिट:",
         "Backup failed. Aborting.": "बैकअप विफल रहा। रद्द किया जा रहा है।"
     }
 }

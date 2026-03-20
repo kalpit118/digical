@@ -24,7 +24,7 @@ class Updater:
             response = requests.get(f"{self.api_url}/commits/main", timeout=10)
             if response.status_code == 200:
                 latest_sha = response.json().get("sha")
-                current_sha = self._get_current_sha()
+                current_sha, _ = self._get_version_info()
                 return latest_sha != current_sha, latest_sha
             return False, None
         except Exception as e:
@@ -61,8 +61,9 @@ class Updater:
                 shutil.copy2(os.path.join(root_dir, file), os.path.join(self.backup_dir, file))
             
             # Save metadata
+            sha, build_date = self._get_version_info()
             with open(self.metadata_file, "w") as f:
-                json.dump({"current_sha": self._get_current_sha()}, f)
+                json.dump({"current_sha": sha, "build_date": build_date}, f)
             return True
         except Exception as e:
             print(f"Backup failed: {e}")
@@ -88,8 +89,10 @@ class Updater:
                 else:
                     shutil.copy2(s, d)
             
-            # Update the stored SHA
-            self._save_current_sha(new_sha)
+            # Update the stored version info
+            from datetime import datetime
+            build_date = datetime.now().strftime("%Y-%m-%d")
+            self._save_version_info(new_sha, build_date)
             
             # Cleanup
             shutil.rmtree(self.temp_dir)
@@ -114,27 +117,33 @@ class Updater:
             if os.path.exists(self.metadata_file):
                 with open(self.metadata_file, "r") as f:
                     meta = json.load(f)
-                    self._save_current_sha(meta.get("current_sha", "main"))
+                    self._save_version_info(
+                        meta.get("current_sha", config.CURRENT_SHA),
+                        meta.get("build_date", config.BUILD_DATE)
+                    )
             
             return True
         except Exception as e:
             print(f"Revert failed: {e}")
             return False
 
-    def _get_current_sha(self):
-        """Retrieves the currently stored SHA from settings.json or config."""
+    def _get_version_info(self):
+        """Retrieves the currently stored SHA and Build Date."""
         settings_path = os.path.join(os.path.dirname(__file__), "settings.json")
+        sha = config.CURRENT_SHA
+        build_date = config.BUILD_DATE
         try:
             if os.path.exists(settings_path):
                 with open(settings_path, "r") as f:
                     settings = json.load(f)
-                    return settings.get("current_sha", config.CURRENT_SHA)
+                    sha = settings.get("current_sha", sha)
+                    build_date = settings.get("build_date", build_date)
         except:
             pass
-        return config.CURRENT_SHA
+        return sha, build_date
 
-    def _save_current_sha(self, sha):
-        """Persists the new SHA to settings.json."""
+    def _save_version_info(self, sha, build_date):
+        """Persists the new SHA and Build Date to settings.json."""
         settings_path = os.path.join(os.path.dirname(__file__), "settings.json")
         try:
             settings = {}
@@ -142,10 +151,11 @@ class Updater:
                 with open(settings_path, "r") as f:
                     settings = json.load(f)
             settings["current_sha"] = sha
+            settings["build_date"] = build_date
             with open(settings_path, "w") as f:
                 json.dump(settings, f, indent=2)
         except Exception as e:
-            print(f"Failed to save SHA: {e}")
+            print(f"Failed to save version info: {e}")
 
     def restart_app(self):
         """Restarts the current Python script."""

@@ -1720,12 +1720,23 @@ class DigiCalGUI:
         up_frame.pack(fill=tk.X, pady=2)
         
         updater = Updater()
+        cur_sha, cur_build = updater._get_version_info()
+        
         up_status_var = tk.StringVar(value=self.tr("Ready"))
         up_btn_var = tk.StringVar(value=self.tr("Check for Updates"))
         self._new_sha = None
         
-        up_status_lbl = tk.Label(up_frame, textvariable=up_status_var, font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"])
-        up_status_lbl.pack(anchor=tk.W)
+        # Current Version Info
+        info_f = tk.Frame(up_frame, bg=T["bg"])
+        info_f.pack(fill=tk.X, pady=(0, 5))
+        
+        v_str = f"v{config.VERSION}"
+        tk.Label(info_f, text=f"{self.tr('Current Version:')} {v_str}", font=(config.LABEL_FONT[0], 9, "bold"), bg=T["bg"], fg=T["text"]).pack(anchor=tk.W)
+        tk.Label(info_f, text=f"{self.tr('Build Date:')} {cur_build}", font=(config.LABEL_FONT[0], 8), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(info_f, text=f"{self.tr('Commit:')} {cur_sha[:7]}", font=(config.LABEL_FONT[0], 8), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+
+        up_status_lbl = tk.Label(up_frame, textvariable=up_status_var, font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["accent"])
+        up_status_lbl.pack(anchor=tk.W, pady=(5, 0))
 
         def _check_up():
             up_status_var.set(self.tr("Checking..."))
@@ -1790,8 +1801,15 @@ class DigiCalGUI:
         # 6) ABOUT
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         c6 = card(scroll_frame, "", self.tr("About DigiCal"))
-        tk.Label(c6, text=f"{config.APP_NAME}  v{config.VERSION}",
-                 font=(config.BUTTON_FONT[0], 9, "bold"),
+        updater = Updater()
+        sha, b_date = updater._get_version_info()
+        full_v = f"v{config.VERSION} Build {b_date} ({sha[:7]})"
+        
+        tk.Label(c6, text=f"{config.APP_NAME}",
+                 font=(config.BUTTON_FONT[0], 10, "bold"),
+                 bg=T["bg"], fg=T["text"]).pack(anchor=tk.W)
+        tk.Label(c6, text=full_v,
+                 font=(config.BUTTON_FONT[0], 9),
                  bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
 
         # ── Close button ───────────────────────────────────────────────────

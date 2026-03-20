@@ -168,6 +168,8 @@ digical.db
 settings.json
 history.txt
 *.log
+backups/
+temp_update/
 
 # AI agent
 .agent/

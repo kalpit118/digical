@@ -8,6 +8,7 @@ APP_NAME = "DigiCal Business Calculator"
 VERSION = "1.0.0"
 GITHUB_REPO = "kalpit118/digical"
 CURRENT_SHA = "main" # Placeholder for the current commit SHA
+BUILD_DATE = "2026-03-20" # Initial build date fallback
 
 # Base Font Definitions
 _BASE_DISPLAY = ("Consolas", 24, "bold")
