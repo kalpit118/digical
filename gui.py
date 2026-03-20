@@ -1879,6 +1879,7 @@ class DigiCalGUI:
         ov = tk.Frame(self.root, bg=T["bg"])
         ov.place(x=0, y=0, relwidth=1, relheight=1)
         ov.lift()
+        ov.update_idletasks() # Force background draw
 
         # ── animated GIF ───────────────────────────────────────────────────
         try:
@@ -1900,38 +1901,28 @@ class DigiCalGUI:
             if target in self._success_gif_cache:
                 frames = self._success_gif_cache[target]
             else:
-                # Check for an existing cache and clear it to save memory if size changed
                 self._success_gif_cache.clear()
-                
                 raw = Image.open(gif_path)
                 raw_w, raw_h = raw.size
                 scale = target / raw_h if raw_h else 1
                 new_w, new_h = max(1, int(raw_w * scale)), max(1, target)
                 
-                # Pre-composite onto theme background to avoid Linux transparency glitches
-                # Tkinter on Linux often struggles with RGBA GIF transparency over a colored parent
-                try:
-                    bg_rgb = self.root.winfo_rgb(T["bg"])
-                    bg_color = (bg_rgb[0]>>8, bg_rgb[1]>>8, bg_rgb[2]>>8)
-                except:
-                    bg_color = (255, 255, 255) # Fallback to white
-
                 frames = []
                 try:
                     while True:
-                        # 1. Start with solid background
+                        # 1. Convert frame to RGBA
                         f = raw.copy().convert("RGBA")
-                        combined = Image.new("RGBA", f.size, bg_color)
-                        # 2. Paste GIF frame using itself as mask (handles transparency)
+                        # 2. Create SOLID background image using the theme's HEX color
+                        # This eliminates transparency issues on Linux/Pi
+                        combined = Image.new("RGB", f.size, T["bg"]) 
                         combined.paste(f, (0,0), f)
-                        # 3. Resize the flattened result
+                        # 3. Resize the flattened OPAQUE result
                         f_final = combined.resize((new_w, new_h), Image.LANCZOS)
                         frames.append(ImageTk.PhotoImage(f_final))
                         
                         if hasattr(raw, 'seek'):
                             raw.seek(raw.tell() + 1)
-                        else:
-                            break
+                        else: break
                 except EOFError:
                     pass
                 self._success_gif_cache[target] = frames
@@ -1943,10 +1934,10 @@ class DigiCalGUI:
                 if not ov.winfo_exists():
                     return
                 gif_label.config(image=frames[idx % len(frames)])
-                ov.after(50, _animate, idx + 1)
+                ov.after(80, _animate, idx + 1) # Slower for Pi stability
 
             _animate()
-        except Exception:
+        except Exception as e:
             # Fallback: big unicode tick
             tk.Label(ov, text="\u2714", font=("Arial", 72), bg=T["bg"],
                      fg=T["success"]).pack(pady=(60, 8))
