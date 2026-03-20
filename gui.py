@@ -122,8 +122,15 @@ class SystemPanel:
                 if "Connect state:        Connected" in out:
                     wifi_key = "wifi_on"
             else:
-                res = subprocess.check_output(["nmcli", "-t", "-f", "CONNECTIVITY", "connectivity"], text=True).strip()
-                if res in ["full", "limited"]: wifi_key = "wifi_on"
+                # Use 'general status' for better compatibility with older NetworkManager versions
+                try:
+                    res = subprocess.check_output(["nmcli", "-t", "-f", "STATE", "general"], text=True).strip().lower()
+                    # Check for connected state (includes 'connected' and 'connected (local only)')
+                    if res.startswith("connected"): wifi_key = "wifi_on"
+                except:
+                    # Fallback for even older systems or if nmcli is missing 'general'
+                    res = subprocess.check_output("hostname -I", shell=True, text=True).strip()
+                    if res: wifi_key = "wifi_on"
         except: pass
 
         # 3. Bluetooth
@@ -135,8 +142,16 @@ class SystemPanel:
                 res = subprocess.check_output(cmd, shell=True, text=True).strip()
                 if res: bt_key = "bt_on"
             else:
-                res = subprocess.check_output("rfkill list bluetooth", shell=True, text=True)
-                if "soft blocked: no" in res.lower(): bt_key = "bt_on"
+                # Check rfkill and also bluetooth service state if possible
+                # More robust rfkill check: find the 'bluetooth' line specifically
+                res = subprocess.check_output("rfkill list bluetooth", shell=True, text=True).lower()
+                # Check if bluetooth is present and not blocked
+                if "bluetooth" in res and "soft blocked: no" in res and "hard blocked: no" in res:
+                    bt_key = "bt_on"
+                else:
+                    # Fallback check via systemctl if rfkill is ambiguous
+                    res = subprocess.check_output("systemctl is-active bluetooth", shell=True, text=True).strip()
+                    if res == "active": bt_key = "bt_on"
         except: pass
 
         # Update UI in main thread
@@ -259,11 +274,11 @@ class DigiCalGUI:
                   background=[("selected", T["accent"])],
                   foreground=[("selected", "#FFFFFF")])
         style.configure("Vertical.TScrollbar",
-                        background=T["shadow_dark"], troughcolor=T["display_bg"],
-                        borderwidth=0, relief="flat", width=10, arrowsize=0)
+                        background=T["subtext"], troughcolor=T["display_bg"],
+                        borderwidth=0, relief="flat", width=14, arrowsize=0)
         style.map("Vertical.TScrollbar",
                   background=[("active", T["accent"]), ("pressed", T["accent"]),
-                              ("!disabled", T["shadow_dark"])],
+                              ("!disabled", T["subtext"])],
                   troughcolor=[("!disabled", T["display_bg"])])
 
     def apply_theme(self):
@@ -296,6 +311,32 @@ class DigiCalGUI:
         self._save_settings({"font_scale": scale_name})
         config.set_font_scale(scale_name)
         self.apply_theme()
+
+    def _bind_mousewheel(self, widget, callback):
+        """Cross-platform mouse-wheel binding"""
+        widget.bind_all("<MouseWheel>", callback)
+        widget.bind_all("<Button-4>", callback)
+        widget.bind_all("<Button-5>", callback)
+
+    def _unbind_mousewheel(self, widget):
+        """Cross-platform mouse-wheel unbinding"""
+        widget.unbind_all("<MouseWheel>")
+        widget.unbind_all("<Button-4>")
+        widget.unbind_all("<Button-5>")
+
+    def _handle_mousewheel(self, event, canvas, orient="vertical"):
+        """Unified scroll handler for Windows/Linux/macOS"""
+        if event.num == 4: # Linux Scroll Up
+            delta = 1
+        elif event.num == 5: # Linux Scroll Down
+            delta = -1
+        else: # Windows/macOS event.delta
+            delta = event.delta / 120
+        
+        if orient == "vertical":
+            canvas.yview_scroll(int(-1 * delta), "units")
+        else:
+            canvas.xview_scroll(int(-1 * delta), "units")
 
     def _neu_btn(self, parent, text, command=None, kind="normal", **kw):
         """Create a neumorphic styled flat button."""
@@ -987,9 +1028,7 @@ class DigiCalGUI:
         scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
 
         # Mousewheel scrolling for the canvas
-        def _on_mousewheel(event):
-            canvas.xview_scroll(int(-1*(event.delta/120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self._bind_mousewheel(canvas, lambda e: self._handle_mousewheel(e, canvas, orient="horizontal"))
 
         self.graph_frame = tk.Frame(self.content_frame, bg=T["bg"])
         self.graph_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -1012,6 +1051,9 @@ class DigiCalGUI:
         
         w = self.graph_frame.winfo_width()
         h = self.graph_frame.winfo_height()
+        if not self.graph_frame.winfo_exists():
+            return
+            
         if w > 1 and h > 1:
             self.refresh_current_graph(w, h)
         else:
@@ -1027,6 +1069,9 @@ class DigiCalGUI:
         
         w = self.graph_frame.winfo_width()
         h = self.graph_frame.winfo_height()
+        if not self.graph_frame.winfo_exists():
+            return
+            
         if w > 1 and h > 1:
             self.refresh_current_graph(w, h)
         else:
@@ -1042,6 +1087,9 @@ class DigiCalGUI:
         
         w = self.graph_frame.winfo_width()
         h = self.graph_frame.winfo_height()
+        if not self.graph_frame.winfo_exists():
+            return
+            
         if w > 1 and h > 1:
             self.refresh_current_graph(w, h)
         else:
@@ -1057,6 +1105,9 @@ class DigiCalGUI:
         
         w = self.graph_frame.winfo_width()
         h = self.graph_frame.winfo_height()
+        if not self.graph_frame.winfo_exists():
+            return
+            
         if w > 1 and h > 1:
             self.refresh_current_graph(w, h)
         else:
@@ -1130,9 +1181,7 @@ class DigiCalGUI:
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Mouse-wheel scrolling
-        def _on_mousewheel(e):
-            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self._bind_mousewheel(canvas, lambda e: self._handle_mousewheel(e, canvas, orient="vertical"))
 
         font = (config.BUTTON_FONT[0], 14)
         for i, (op, val) in enumerate(lines):
@@ -1211,7 +1260,7 @@ class DigiCalGUI:
 
     def refresh_current_graph(self, width, height):
         """Redraw the current graph with specific pixel dimensions"""
-        if not self.current_graph_info:
+        if not self.current_graph_info or not self.graph_frame.winfo_exists():
             return
             
         func_name, args, kwargs = self.current_graph_info
@@ -1241,6 +1290,9 @@ class DigiCalGUI:
         # Initial draw using current frame size if available
         w = self.graph_frame.winfo_width()
         h = self.graph_frame.winfo_height()
+        if not self.graph_frame.winfo_exists():
+            return
+            
         if w > 1 and h > 1:
             self.refresh_current_graph(w, h)
         else:
@@ -1423,13 +1475,11 @@ class DigiCalGUI:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Mouse-wheel scrolling
-        def _on_mousewheel(e):
-            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self._bind_mousewheel(canvas, lambda e: self._handle_mousewheel(e, canvas, orient="vertical"))
 
         def _cleanup_bindings():
             try:
-                canvas.unbind_all("<MouseWheel>")
+                self._unbind_mousewheel(canvas)
             except Exception:
                 pass
 

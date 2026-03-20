@@ -19,6 +19,12 @@ class GraphGenerator:
                 plt.style.use('seaborn-darkgrid')
             except OSError:
                 plt.style.use('ggplot')
+        
+        # Use DejaVu Sans to support Rupee symbol (₹) on Linux
+        try:
+            plt.rcParams['font.family'] = 'DejaVu Sans'
+        except:
+            pass
     
     def _create_fig(self, figsize=None):
         """Internal helper to create a figure with optional custom size"""
