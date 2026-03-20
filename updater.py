@@ -24,7 +24,14 @@ class Updater:
             response = requests.get(f"{self.api_url}/commits/main", timeout=10)
             if response.status_code == 200:
                 latest_sha = response.json().get("sha")
-                current_sha, _ = self._get_version_info()
+                current_sha, build_date = self._get_version_info()
+                
+                # Bootstrap: If local SHA is uninitialized ("main"), sync it without flagging an update.
+                # This fixes the "Update Available" false positive for new installations.
+                if current_sha == "main":
+                    self._save_version_info(latest_sha, build_date)
+                    return False, latest_sha
+                
                 return latest_sha != current_sha, latest_sha
             return False, None
         except Exception as e:

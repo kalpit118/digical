@@ -7,7 +7,7 @@ import os
 APP_NAME = "DigiCal Business Calculator"
 VERSION = "1.0.0"
 GITHUB_REPO = "kalpit118/digical"
-CURRENT_SHA = "main" # Placeholder for the current commit SHA
+CURRENT_SHA = "main" # Placeholder: replaced by real SHA on first update check
 BUILD_DATE = "2026-03-20" # Initial build date fallback
 
 # Base Font Definitions
