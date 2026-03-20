@@ -168,6 +168,8 @@ digical.db
 settings.json
 history.txt
 *.log
+
+# DigiCal Update Files
 backups/
 temp_update/
 
