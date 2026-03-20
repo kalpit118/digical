@@ -11,3 +11,6 @@ Flask-CORS>=3.0.0
 # UPI QR Code Generation
 qrcode[pil]>=7.0.0
 Pillow>=8.0.0,<9.0.0
+
+# HTTP requests for Updates
+requests>=2.25.0

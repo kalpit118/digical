@@ -20,6 +20,7 @@ from transaction_manager import TransactionManager
 from history_manager import HistoryManager
 from graph_generator import GraphGenerator
 from handler_manager import HandlerManager
+from updater import Updater
 
 class SystemPanel:
     """Displays system status icons (Battery, Wifi, Bluetooth) in the header."""
@@ -1710,6 +1711,80 @@ class DigiCalGUI:
         
         tk.Label(portal_info, text=self.tr("Access from Phone/Laptop (Same WiFi):"), font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
         tk.Label(portal_info, text=f"http://{local_ip}:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # 5.5) SYSTEM UPDATE
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        c_up = card(scroll_frame, "", self.tr("System Update"))
+        up_frame = tk.Frame(c_up, bg=T["bg"])
+        up_frame.pack(fill=tk.X, pady=2)
+        
+        updater = Updater()
+        up_status_var = tk.StringVar(value=self.tr("Ready"))
+        up_btn_var = tk.StringVar(value=self.tr("Check for Updates"))
+        self._new_sha = None
+        
+        up_status_lbl = tk.Label(up_frame, textvariable=up_status_var, font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"])
+        up_status_lbl.pack(anchor=tk.W)
+
+        def _check_up():
+            up_status_var.set(self.tr("Checking..."))
+            self.root.update_idletasks()
+            available, sha = updater.check_for_update()
+            if available:
+                self._new_sha = sha
+                up_status_var.set(self.tr("Update Available!"))
+                up_btn_var.set(self.tr("Download Update"))
+                check_btn.config(command=_download_up)
+            else:
+                up_status_var.set(self.tr("Already up to date."))
+                flash_saved(self.tr("No updates found"))
+
+        def _download_up():
+            up_status_var.set(self.tr("Downloading..."))
+            self.root.update_idletasks()
+            if updater.download_update():
+                up_status_var.set(self.tr("Download Complete. Ready to install."))
+                up_btn_var.set(self.tr("Apply & Restart"))
+                check_btn.config(command=_apply_up)
+            else:
+                up_status_var.set(self.tr("Download failed."))
+                self._show_toast(self.tr("Download failed. Check connection."), kind="error")
+
+        def _apply_up():
+            self._show_confirm(self.tr("Backup and update now? (Auto-restarts)"), lambda: _do_apply())
+            
+        def _do_apply():
+            up_status_var.set(self.tr("Backing up..."))
+            self.root.update_idletasks()
+            if not updater.create_backup():
+                self._show_toast(self.tr("Backup failed. Aborting."), kind="error")
+                return
+            
+            up_status_var.set(self.tr("Applying..."))
+            self.root.update_idletasks()
+            if updater.apply_update(self._new_sha):
+                updater.restart_app()
+            else:
+                self._show_toast(self.tr("Update failed."), kind="error")
+
+        def _revert_up():
+            if not os.path.exists(updater.backup_dir):
+                self._show_toast(self.tr("No backup found to revert."), kind="warning")
+                return
+            self._show_confirm(self.tr("Revert to last backup? (Auto-restarts)"), lambda: _do_revert())
+
+        def _do_revert():
+            if updater.revert_update():
+                updater.restart_app()
+            else:
+                self._show_toast(self.tr("Revert failed."), kind="error")
+
+        check_btn = self._neu_btn(up_frame, "", textvariable=up_btn_var, command=_check_up, kind="equals")
+        check_btn.pack(side=tk.LEFT, padx=3, pady=5)
+        
+        revert_btn = self._neu_btn(up_frame, self.tr("Revert Update"), command=_revert_up, kind="mode")
+        revert_btn.pack(side=tk.LEFT, padx=3, pady=5)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 6) ABOUT

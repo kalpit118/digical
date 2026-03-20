@@ -199,7 +199,29 @@ TRANSLATIONS = {
         "Medium": "Medium",
         "Large": "Large",
         "Extra Large": "Extra Large",
-        "Fullscreen Mode": "Fullscreen Mode"
+        "Fullscreen Mode": "Fullscreen Mode",
+        
+        # System Update
+        "System Update": "System Update",
+        "Ready": "Ready",
+        "Check for Updates": "Check for Updates",
+        "Checking...": "Checking...",
+        "Update Available!": "Update Available!",
+        "Download Update": "Download Update",
+        "Downloading...": "Downloading...",
+        "Download Complete. Ready to install.": "Download Complete. Ready to install.",
+        "Apply & Restart": "Apply & Restart",
+        "Already up to date.": "Already up to date.",
+        "No updates found": "No updates found",
+        "Download failed.": "Download failed.",
+        "Download failed. Check connection.": "Download failed. Check connection.",
+        "Backup and update now? (Auto-restarts)": "Backup and update now? (Auto-restarts)",
+        "Revert Update": "Revert Update",
+        "Revert to last backup? (Auto-restarts)": "Revert to last backup? (Auto-restarts)",
+        "No backup found to revert.": "No backup found to revert.",
+        "Backing up...": "Backing up...",
+        "Applying...": "Applying...",
+        "Backup failed. Aborting.": "Backup failed. Aborting."
     },
     
     "mr": {
@@ -398,7 +420,29 @@ TRANSLATIONS = {
         "Medium": "मध्यम",
         "Large": "मोठा",
         "Extra Large": "खूप मोठा",
-        "Fullscreen Mode": "फुलस्क्रीन मोड"
+        "Fullscreen Mode": "फुलस्क्रीन मोड",
+        
+        # System Update
+        "System Update": "सिस्टम अपडेट",
+        "Ready": "तयार",
+        "Check for Updates": "अपडेट तपासा",
+        "Checking...": "तपासत आहे...",
+        "Update Available!": "अपडेट उपलब्ध आहे!",
+        "Download Update": "अपडेट डाउनलोड करा",
+        "Downloading...": "डाउनलोड होत आहे...",
+        "Download Complete. Ready to install.": "डाउनलोड पूर्ण. स्थापित करण्यासाठी तयार.",
+        "Apply & Restart": "लागू करा आणि रीस्टार्ट करा",
+        "Already up to date.": "आधीच अपडेट केलेले आहे.",
+        "No updates found": "कोणतेही अपडेट सापडले नाहीत",
+        "Download failed.": "डाउनलोड अयशस्वी.",
+        "Download failed. Check connection.": "डाउनलोड अयशस्वी. कनेक्शन तपासा.",
+        "Backup and update now? (Auto-restarts)": "बॅकअप घ्या आणि आता अपडेट करा? (स्वयंचलित रीस्टार्ट)",
+        "Revert Update": "अपडेट मागे घ्या",
+        "Revert to last backup? (Auto-restarts)": "मागील बॅकअपवर परत यायचे का? (स्वयंचलित रीस्टार्ट)",
+        "No backup found to revert.": "परत येण्यासाठी कोणताही बॅकअप सापडला नाही.",
+        "Backing up...": "बॅकअप घेत आहे...",
+        "Applying...": "लागू करत आहे...",
+        "Backup failed. Aborting.": "बॅकअप अयशस्वी. रद्द करत आहे."
     },
     
     "hi": {
@@ -597,7 +641,29 @@ TRANSLATIONS = {
         "Medium": "मध्यम",
         "Large": "बड़ा",
         "Extra Large": "बहुत बड़ा",
-        "Fullscreen Mode": "फ़ुलस्क्रीन मोड"
+        "Fullscreen Mode": "फ़ुलस्क्रीन मोड",
+        
+        # System Update
+        "System Update": "सिस्टम अपडेट",
+        "Ready": "तैयार",
+        "Check for Updates": "अपडेट के लिए जाँच करें",
+        "Checking...": "जाँच हो रही है...",
+        "Update Available!": "अपडेट उपलब्ध है!",
+        "Download Update": "अपडेट डाउनलोड करें",
+        "Downloading...": "डाउनलोड हो रहा है...",
+        "Download Complete. Ready to install.": "डाउनलोड पूरा हुआ। स्थापित करने के लिए तैयार है।",
+        "Apply & Restart": "लागू करें और रीस्टार्ट करें",
+        "Already up to date.": "पहले से ही अपडेट है।",
+        "No updates found": "कोई अपडेट नहीं मिला",
+        "Download failed.": "डाउनलोड विफल रहा।",
+        "Download failed. Check connection.": "डाउनलोड विफल रहा। कनेक्शन की जाँच करें।",
+        "Backup and update now? (Auto-restarts)": "बैकअप लें और अभी अपडेट करें? (ऑटो-रीस्टार्ट)",
+        "Revert Update": "अपडेट वापस लें",
+        "Revert to last backup? (Auto-restarts)": "पिछले बैकअप पर वापस लौटें? (ऑटो-रीस्टार्ट)",
+        "No backup found to revert.": "वापस लौटने के लिए कोई बैकअप नहीं मिला।",
+        "Backing up...": "बैकअप लिया जा रहा है...",
+        "Applying...": "लागू किया जा रहा है...",
+        "Backup failed. Aborting.": "बैकअप विफल रहा। रद्द किया जा रहा है।"
     }
 }
 

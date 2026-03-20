@@ -6,6 +6,8 @@ import os
 # Application Settings
 APP_NAME = "DigiCal Business Calculator"
 VERSION = "1.0.0"
+GITHUB_REPO = "kalpit118/digical"
+CURRENT_SHA = "main" # Placeholder for the current commit SHA
 
 # Base Font Definitions
 _BASE_DISPLAY = ("Consolas", 24, "bold")
