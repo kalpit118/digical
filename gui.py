@@ -1900,20 +1900,38 @@ class DigiCalGUI:
             if target in self._success_gif_cache:
                 frames = self._success_gif_cache[target]
             else:
+                # Check for an existing cache and clear it to save memory if size changed
+                self._success_gif_cache.clear()
+                
                 raw = Image.open(gif_path)
                 raw_w, raw_h = raw.size
                 scale = target / raw_h if raw_h else 1
                 new_w, new_h = max(1, int(raw_w * scale)), max(1, target)
                 
-                # Check for an existing cache and clear it to save memory if size changed
-                self._success_gif_cache.clear()
-                
+                # Pre-composite onto theme background to avoid Linux transparency glitches
+                # Tkinter on Linux often struggles with RGBA GIF transparency over a colored parent
+                try:
+                    bg_rgb = self.root.winfo_rgb(T["bg"])
+                    bg_color = (bg_rgb[0]>>8, bg_rgb[1]>>8, bg_rgb[2]>>8)
+                except:
+                    bg_color = (255, 255, 255) # Fallback to white
+
                 frames = []
                 try:
                     while True:
-                        f = raw.copy().convert("RGBA").resize((new_w, new_h), Image.LANCZOS)
-                        frames.append(ImageTk.PhotoImage(f))
-                        raw.seek(raw.tell() + 1)
+                        # 1. Start with solid background
+                        f = raw.copy().convert("RGBA")
+                        combined = Image.new("RGBA", f.size, bg_color)
+                        # 2. Paste GIF frame using itself as mask (handles transparency)
+                        combined.paste(f, (0,0), f)
+                        # 3. Resize the flattened result
+                        f_final = combined.resize((new_w, new_h), Image.LANCZOS)
+                        frames.append(ImageTk.PhotoImage(f_final))
+                        
+                        if hasattr(raw, 'seek'):
+                            raw.seek(raw.tell() + 1)
+                        else:
+                            break
                 except EOFError:
                     pass
                 self._success_gif_cache[target] = frames
