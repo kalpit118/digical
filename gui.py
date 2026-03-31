@@ -45,6 +45,9 @@ class SystemPanel:
                                    bg=self.T["hdr_bg"], fg=self.T["text"])
         self.time_label.pack(side=tk.RIGHT, padx=(2, 5))
 
+        self.shift_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
+        self.shift_label.pack(side=tk.RIGHT, padx=4)
+
         self.icons = {}
         self._load_icons()
 
@@ -53,8 +56,16 @@ class SystemPanel:
         self.wifi_label.config(image=self.icons.get("wifi_off"))
         self.bluetooth_label.config(image=self.icons.get("bt_off"))
         self.time_label.config(text=datetime.now().strftime("%I:%M %p •"))
+        self.shift_label.config(image="")
         
         self.refresh()
+
+    def show_shift(self):
+        if "shift" in self.icons:
+            self.shift_label.config(image=self.icons["shift"])
+
+    def hide_shift(self):
+        self.shift_label.config(image="")
 
     def _load_icons(self):
         try:
@@ -67,7 +78,8 @@ class SystemPanel:
                 "wifi_on": "wifi_on.png", "wifi_off": "wifi_off.png",
                 "bt_on": "bluetooth_on.png", "bt_off": "bluetooth_off.png",
                 "bat0": "battery0.png", "bat10": "battery10.png",
-                "bat50": "battery50.png", "bat90": "battery90.png", "bat100": "battery100.png"
+                "bat50": "battery50.png", "bat90": "battery90.png", "bat100": "battery100.png",
+                "shift": "shiftkey.png"
             }
 
             for key, filename in icon_files.items():
@@ -1369,7 +1381,12 @@ class DigiCalGUI:
                  font=(config.BUTTON_FONT[0], 9, "bold"),
                  bg=T["hdr_bg"], fg=T["accent"]).pack(side=tk.LEFT, padx=8)
 
+        self._app_launcher_open = True
+        self._launcher_cells = []
+        self._launcher_focus_idx = 0
+
         def _close(event=None):
+            self._app_launcher_open = False
             ov.destroy()
             self.root.bind("<Escape>", lambda e: self._show_app_launcher())
 
@@ -1431,13 +1448,13 @@ class DigiCalGUI:
             c_frame = tk.Frame(cell, bg=card_bg, cursor="hand2")
             c_frame.pack(expand=True)
 
-            def _enter(e, f=cell, c=c_frame):
+            def _enter(e=None, f=cell, c=c_frame):
                 f.config(bg=T["bg_dark"])
                 c.config(bg=T["bg_dark"])
                 for child in c.winfo_children():
                     child.config(bg=T["bg_dark"])
 
-            def _leave(e, f=cell, c=c_frame):
+            def _leave(e=None, f=cell, c=c_frame):
                 f.config(bg=card_bg)
                 c.config(bg=card_bg)
                 for child in c.winfo_children():
@@ -1463,8 +1480,15 @@ class DigiCalGUI:
                     w.bind("<Enter>", _enter)
                     w.bind("<Leave>", _leave)
 
+            self._launcher_cells.append((cell, _enter, _leave, mode))
 
+        # Store launch function for keypad D-Pad selection
+        self._show_app_launcher_launch = _launch
 
+        # Pre-highlight first app
+        if self._launcher_cells:
+            _, _enter, _, _ = self._launcher_cells[0]
+            _enter()
 
     # ── Settings ─────────────────────────────────────────────────────────────
     def show_settings_mode(self):
@@ -3249,6 +3273,14 @@ class DigiCalGUI:
     def _dispatch_keypad_action(self, action):
         """Internal dispatcher — runs on the Tk main loop thread."""
 
+        # ── Shift state ─────────────────────────────────────────────
+        if action == "shift_on":
+            self.system_panel.show_shift()
+            return
+        if action == "shift_off":
+            self.system_panel.hide_shift()
+            return
+
         # ── Digit keys ──────────────────────────────────────────────
         if action.startswith("digit_"):
             d = action[6:]  # "digit_9" → "9", "digit_00" → "00"
@@ -3284,10 +3316,15 @@ class DigiCalGUI:
                 self.calculator_button_click("%")
             return
 
-        # ── Equals ──────────────────────────────────────────────────
+        # ── Equals (Enter) ──────────────────────────────────────────
         if action == "equals":
-            if self.current_mode == "calculator":
+            if getattr(self, '_app_launcher_open', False):
+                self._keypad_navigate(action)
+                return
+            if self.current_mode == "calculator" and not self._transaction_dialog_open:
                 self.calculator_button_click("=")
+            else:
+                self._keypad_navigate(action)
             return
 
         # ── Clear / Backspace ───────────────────────────────────────
@@ -3321,12 +3358,19 @@ class DigiCalGUI:
 
         # ── Menu (App Launcher) ─────────────────────────────────────
         if action == "menu":
-            self._show_app_launcher()
+            if getattr(self, '_app_launcher_open', False):
+                # We need to simulate the escape close
+                self.root.event_generate("<Escape>")
+            else:
+                self._show_app_launcher()
             return
 
         # ── Graph / Analytics ───────────────────────────────────────
         if action == "graph":
-            self.switch_mode("graphs")
+            if self.current_mode == "graphs":
+                self.switch_mode("calculator")
+            else:
+                self.switch_mode("graphs")
             return
 
         # ── Sales key ───────────────────────────────────────────────
@@ -3347,7 +3391,10 @@ class DigiCalGUI:
 
         # ── Due (Customers) key ─────────────────────────────────────
         if action == "due":
-            self.switch_mode("customers")
+            if self.current_mode == "customers":
+                self.switch_mode("calculator")
+            else:
+                self.switch_mode("customers")
             return
 
         # ── QR / Payment cycle ──────────────────────────────────────
@@ -3391,7 +3438,7 @@ class DigiCalGUI:
 
     # ── Direction key navigation ────────────────────────────────────────
     def _keypad_navigate(self, action):
-        """Generate synthetic Tkinter key events for navigation."""
+        """Smart navigation handling App Launcher Grid and focus traversal."""
         keysym_map = {
             "dir_up":    "Up",
             "dir_down":  "Down",
@@ -3399,16 +3446,68 @@ class DigiCalGUI:
             "dir_right": "Right",
         }
         keysym = keysym_map.get(action)
-        if not keysym:
+        if not keysym and action != "equals":
             return
 
-        # Get the currently focused widget
+        # 1. Special handling for App Launcher overlay (Grid Navigation)
+        if getattr(self, '_app_launcher_open', False):
+            if hasattr(self, '_launcher_cells') and getattr(self, '_launcher_focus_idx', -1) >= 0:
+                idx = self._launcher_focus_idx
+                cells = self._launcher_cells
+                
+                # Turn off current highlight
+                curr_cell, curr_enter, curr_leave, curr_mode = cells[idx]
+                curr_leave()
+                
+                if action == "dir_right":
+                    idx = min(idx + 1, len(cells) - 1)
+                elif action == "dir_left":
+                    idx = max(idx - 1, 0)
+                elif action == "dir_down":
+                    idx = min(idx + 3, len(cells) - 1)
+                elif action == "dir_up":
+                    idx = max(idx - 3, 0)
+                elif action == "equals":
+                    # Let equals act as Enter here
+                    if hasattr(self, '_show_app_launcher_launch'):
+                        self._show_app_launcher_launch(curr_mode)
+                    return
+                
+                # Turn on new highlight
+                self._launcher_focus_idx = idx
+                new_cell, new_enter, new_leave, new_mode = cells[idx]
+                new_enter()
+            return
+
+        # 2. Global Navigation for Settings/Dialogs/Calculator
         focused = self.root.focus_get()
         if focused is None:
             focused = self.root
-
-        # Generate a synthetic KeyPress event
-        focused.event_generate(f"<{keysym}>", when="tail")
+            
+        # If equals, inject Return / Activate
+        if action == "equals":
+            # For buttons, invoke them directly or generate Return
+            wtype = focused.winfo_class()
+            if wtype in ("Button", "TButton"):
+                focused.invoke()
+            else:
+                focused.event_generate("<Return>", when="tail")
+            return
+            
+        # Smart Focus jumping for left/right/up/down
+        wtype = focused.winfo_class()
+        
+        # If inside a list/dropdown, let Up/Down scroll natively
+        if wtype in ("TCombobox", "Treeview", "Listbox"):
+            if action in ("dir_up", "dir_down"):
+                focused.event_generate(f"<{keysym}>", when="tail")
+                return
+                
+        # By default, use Tab traversal hierarchy for D-Pad
+        if action in ("dir_right", "dir_down"):
+            focused.tk_focusNext().focus_set()
+        elif action in ("dir_left", "dir_up"):
+            focused.tk_focusPrev().focus_set()
 
     # ── F1 programmable key ─────────────────────────────────────────────
     def _keypad_f1_action(self):

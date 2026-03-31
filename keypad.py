@@ -225,17 +225,18 @@ class Keypad:
     # ── Internal ──────────────────────────────────────────────────────
 
     def _resolve_action(self, key_name):
-        """Resolve a physical key name to its logical action,
+        """Resolve a physical key name to its logical action(s),
         taking SHIFT state into account."""
         if key_name == "R1C7":
-            # SHIFT key itself — toggle shift and don't fire an action
+            # SHIFT key itself — toggle shift and fire special action
             self._shift_active = True
-            return None
+            return "shift_on"
 
         if self._shift_active:
             self._shift_active = False
             # Check shifted mapping first, fall back to normal
             action = SHIFT_MAP.get(key_name, KEY_MAP.get(key_name))
+            return ["shift_off", action] if action else "shift_off"
         else:
             action = KEY_MAP.get(key_name)
 
@@ -266,13 +267,18 @@ class Keypad:
                         print(f"[Keypad] Raw callback error for {key_name}: {e}")
 
                 # Action callbacks (with SHIFT resolution)
-                action = self._resolve_action(key_name)
-                if action:
-                    for cb in self._action_callbacks:
-                        try:
-                            cb(action)
-                        except Exception as e:
-                            print(f"[Keypad] Action callback error for {key_name}→{action}: {e}")
+                actions = self._resolve_action(key_name)
+                if actions:
+                    # Support both single actions and lists of actions
+                    if not isinstance(actions, list):
+                        actions = [actions]
+                    for action in actions:
+                        if action:
+                            for cb in self._action_callbacks:
+                                try:
+                                    cb(action)
+                                except Exception as e:
+                                    print(f"[Keypad] Action callback error for {key_name}→{action}: {e}")
 
             time.sleep(SCAN_INTERVAL_S)
 
