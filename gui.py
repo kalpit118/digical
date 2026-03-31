@@ -86,7 +86,7 @@ class SystemPanel:
                 path = os.path.join(header_assets, filename)
                 if os.path.exists(path):
                     img = Image.open(path).convert("RGBA").resize(size, _resample)
-                    if self.is_dark:
+                    if self.is_dark and key == "shift":
                         # Invert RGB while preserving Alpha
                         r, g, b, a = img.split()
                         rgb = Image.merge("RGB", (r, g, b))
