@@ -206,6 +206,17 @@ class DigiCalGUI:
         self.current_mode = "calculator"
         self.current_graph_info = None # (func_name, args, kwargs)
 
+        # ── Keypad state ──────────────────────────────────────────────────
+        # These are set/cleared by show_transaction_dialog so the keypad
+        # dispatcher can trigger payment cycling and Sale/Expense buttons.
+        self._active_payment_var = None       # tk.StringVar of current dialog
+        self._active_payment_combo = None     # ttk.Combobox widget
+        self._active_payment_change_fn = None # on_payment_change callback
+        self._active_save_sale_fn = None      # save_as_sale callable
+        self._active_save_expense_fn = None   # save_as_expense callable
+        self._active_dialog_close_fn = None   # close callable
+        self._transaction_dialog_open = False # True while dialog is visible
+
         # Create UI
         self.create_widgets()
         self.switch_mode("calculator")
@@ -1848,7 +1859,45 @@ class DigiCalGUI:
         revert_btn.pack(side=tk.LEFT, padx=3, pady=5)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # 6) ABOUT
+        # 6) KEYPAD
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        c_kp = card(scroll_frame, "", self.tr("Keypad"))
+
+        # F1 function key assignment
+        f1_row = tk.Frame(c_kp, bg=T["bg"])
+        f1_row.pack(fill=tk.X, pady=2)
+        tk.Label(f1_row, text=self.tr("F1 Key Function"),
+                 font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
+
+        f1_options = {
+            "none":      self.tr("None (disabled)"),
+            "settings":  self.tr("Settings"),
+            "history":   self.tr("History"),
+            "graphs":    self.tr("Graphs"),
+            "products":  self.tr("Products"),
+            "handlers":  self.tr("Handlers"),
+            "customers": self.tr("Customers"),
+            "sales":     self.tr("Sales"),
+            "expense":   self.tr("Expense"),
+        }
+        current_f1 = settings.get("f1_function", "none")
+        f1_display = f1_options.get(current_f1, f1_options["none"])
+        f1_var = tk.StringVar(value=f1_display)
+
+        def _on_f1_change(event=None):
+            selected = f1_var.get()
+            code = next((k for k, v in f1_options.items() if v == selected), "none")
+            self._save_settings({"f1_function": code})
+            flash_saved(self.tr("F1 key updated"))
+
+        f1_combo = ttk.Combobox(f1_row, textvariable=f1_var,
+                                values=list(f1_options.values()),
+                                state="readonly", width=16, font=config.LABEL_FONT)
+        f1_combo.bind("<<ComboboxSelected>>", _on_f1_change)
+        f1_combo.pack(side=tk.RIGHT, padx=4)
+
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # 7) ABOUT
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         c6 = card(scroll_frame, "", self.tr("About DigiCal"))
         updater = Updater()
@@ -1963,7 +2012,19 @@ class DigiCalGUI:
         except Exception:
             return
 
-        ov, body, close = self._open_overlay(self.tr("Save as Transaction"))
+        # Wrap close to clear keypad references
+        def _dialog_close():
+            self._transaction_dialog_open = False
+            self._active_payment_var = None
+            self._active_payment_combo = None
+            self._active_payment_change_fn = None
+            self._active_save_sale_fn = None
+            self._active_save_expense_fn = None
+            self._active_dialog_close_fn = None
+            _raw_close()
+
+        ov, body, _raw_close = self._open_overlay(self.tr("Save as Transaction"))
+        close = _dialog_close
         T = self.T
 
         # ── Two-column grid ─────────────────────────────────────
@@ -1991,6 +2052,10 @@ class DigiCalGUI:
         combo = ttk.Combobox(pf, textvariable=payment_var, values=translated_methods,
                              font=("Arial", 20), width=12, state="readonly")
         combo.pack(side=tk.LEFT)
+
+        # Store references for keypad dispatcher
+        self._active_payment_var = payment_var
+        self._active_payment_combo = combo
 
         # ── QR frame  (right col, rows 0-3) ────────────────────
         due_customer = [None]
@@ -2083,7 +2148,10 @@ class DigiCalGUI:
                 qr_frame.grid_remove()
 
         combo.bind("<<ComboboxSelected>>", on_payment_change)
-        
+
+        # Store payment change fn for keypad QR cycling
+        self._active_payment_change_fn = on_payment_change
+
         # Trigger default logic (Cash) to show the icon immediately
         on_payment_change()
 
@@ -2143,6 +2211,12 @@ class DigiCalGUI:
             self.update_display("0")
             close()
             self._show_success_overlay(self.tr("Expense saved  {} [{}]").format(f"₹{amount_val:.2f}", pm))
+
+        # Store save functions for keypad dispatcher
+        self._active_save_sale_fn = save_as_sale
+        self._active_save_expense_fn = save_as_expense
+        self._active_dialog_close_fn = close
+        self._transaction_dialog_open = True
 
         # Buttons  (left col)
         bf = tk.Frame(body, bg=T["bg"])
@@ -3160,3 +3234,197 @@ class DigiCalGUI:
         self.handler_manager.set_current_handler(hid)
         self.update_handler_status()
         self._show_toast(self.tr("Handler '{}' set as active").format(name))
+
+    # ── Keypad Integration ─────────────────────────────────────────────────
+    # Central dispatcher that converts keypad action strings into GUI actions.
+    # KEY_MAP in keypad.py maps physical R{row}C{col} → action names.
+    # To remap a key, change KEY_MAP — this dispatcher stays the same.
+
+    def handle_keypad_action(self, action):
+        """Route a keypad action string to the appropriate GUI method.
+        Called from the Keypad's on_action callback in the main thread."""
+        # Schedule on the Tk main thread to avoid cross-thread widget access
+        self.root.after(0, self._dispatch_keypad_action, action)
+
+    def _dispatch_keypad_action(self, action):
+        """Internal dispatcher — runs on the Tk main loop thread."""
+
+        # ── Digit keys ──────────────────────────────────────────────
+        if action.startswith("digit_"):
+            d = action[6:]  # "digit_9" → "9", "digit_00" → "00"
+            if self.current_mode == "calculator":
+                if d == "00":
+                    self.calculator_button_click("0")
+                    self.calculator_button_click("0")
+                else:
+                    self.calculator_button_click(d)
+            return
+
+        # ── Decimal ─────────────────────────────────────────────────
+        if action == "decimal":
+            if self.current_mode == "calculator":
+                self.calculator_button_click(".")
+            return
+
+        # ── Arithmetic operators ────────────────────────────────────
+        op_map = {
+            "op_plus":  "+",
+            "op_minus": "-",
+            "op_mul":   "×",
+            "op_div":   "÷",
+        }
+        if action in op_map:
+            if self.current_mode == "calculator":
+                self.calculator_button_click(op_map[action])
+            return
+
+        # ── Percent ─────────────────────────────────────────────────
+        if action == "percent":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("%")
+            return
+
+        # ── Equals ──────────────────────────────────────────────────
+        if action == "equals":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("=")
+            return
+
+        # ── Clear / Backspace ───────────────────────────────────────
+        if action == "all_clear":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("C")
+            return
+        if action == "clear_last":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("CE")
+            return
+
+        # ── Memory operations ───────────────────────────────────────
+        if action == "mem_plus":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("M+")
+            return
+        if action == "mem_minus":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("M-")
+            return
+        if action == "mem_recall":
+            if self.current_mode == "calculator":
+                self.calculator_button_click("MR")
+            return
+
+        # ── TAX (stub — not yet implemented) ────────────────────────
+        if action in ("tax_plus", "tax_minus"):
+            self._show_toast("TAX feature coming soon", kind="info")
+            return
+
+        # ── Menu (App Launcher) ─────────────────────────────────────
+        if action == "menu":
+            self._show_app_launcher()
+            return
+
+        # ── Graph / Analytics ───────────────────────────────────────
+        if action == "graph":
+            self.switch_mode("graphs")
+            return
+
+        # ── Sales key ───────────────────────────────────────────────
+        if action == "sales":
+            if self._transaction_dialog_open and self._active_save_sale_fn:
+                self._active_save_sale_fn()
+            else:
+                self.switch_mode("sales")
+            return
+
+        # ── Expense key ─────────────────────────────────────────────
+        if action == "expense":
+            if self._transaction_dialog_open and self._active_save_expense_fn:
+                self._active_save_expense_fn()
+            else:
+                self.switch_mode("expense")
+            return
+
+        # ── Due (Customers) key ─────────────────────────────────────
+        if action == "due":
+            self.switch_mode("customers")
+            return
+
+        # ── QR / Payment cycle ──────────────────────────────────────
+        if action == "qr_cycle":
+            self._keypad_cycle_payment()
+            return
+
+        # ── Direction keys (navigation) ─────────────────────────────
+        if action in ("dir_up", "dir_down", "dir_left", "dir_right"):
+            self._keypad_navigate(action)
+            return
+
+        # ── F1 programmable key ─────────────────────────────────────
+        if action == "f1":
+            self._keypad_f1_action()
+            return
+
+    # ── Payment method cycling ──────────────────────────────────────────
+    def _keypad_cycle_payment(self):
+        """Cycle payment method: Cash → UPI → Due → Cash …
+        Works on the transaction dialog's payment combobox."""
+        if not self._transaction_dialog_open or not self._active_payment_var:
+            return
+
+        methods = [self.tr(m) for m in config.PAYMENT_METHODS]
+        if not methods:
+            return
+
+        current = self._active_payment_var.get()
+        try:
+            idx = methods.index(current)
+            next_idx = (idx + 1) % len(methods)
+        except ValueError:
+            next_idx = 0
+
+        self._active_payment_var.set(methods[next_idx])
+
+        # Trigger the on_payment_change callback to update QR/icon
+        if self._active_payment_change_fn:
+            self._active_payment_change_fn()
+
+    # ── Direction key navigation ────────────────────────────────────────
+    def _keypad_navigate(self, action):
+        """Generate synthetic Tkinter key events for navigation."""
+        keysym_map = {
+            "dir_up":    "Up",
+            "dir_down":  "Down",
+            "dir_left":  "Left",
+            "dir_right": "Right",
+        }
+        keysym = keysym_map.get(action)
+        if not keysym:
+            return
+
+        # Get the currently focused widget
+        focused = self.root.focus_get()
+        if focused is None:
+            focused = self.root
+
+        # Generate a synthetic KeyPress event
+        focused.event_generate(f"<{keysym}>", when="tail")
+
+    # ── F1 programmable key ─────────────────────────────────────────────
+    def _keypad_f1_action(self):
+        """Execute the user-configured F1 function key action."""
+        settings = self._load_settings()
+        f1_func = settings.get("f1_function", "none")
+
+        if f1_func == "none":
+            return
+
+        # Valid mode names that can be switched to
+        valid_modes = {
+            "settings", "history", "graphs",
+            "products", "handlers", "customers",
+            "sales", "expense",
+        }
+
+        if f1_func in valid_modes:
+            self.switch_mode(f1_func)

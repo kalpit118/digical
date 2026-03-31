@@ -71,9 +71,24 @@ def main():
     # Start the GUI
     root = tk.Tk()
     app = DigiCalGUI(root)
+
+    # ── Keypad integration ──────────────────────────────────────────────
+    # Start the matrix keypad scanner (only works on Raspberry Pi with GPIO)
+    keypad = None
+    try:
+        from keypad import Keypad
+        keypad = Keypad()
+        keypad.on_action(app.handle_keypad_action)
+        keypad.start()
+        print("Keypad scanner started")
+    except Exception as e:
+        print(f"Keypad not available: {e}")
+
     root.mainloop()
     
     # Cleanup when GUI closes
+    if keypad:
+        keypad.stop()
     cleanup_api_server()
 
 if __name__ == "__main__":
