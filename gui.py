@@ -41,7 +41,7 @@ class SystemPanel:
         self.bluetooth_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
         self.bluetooth_label.pack(side=tk.RIGHT, padx=2)
 
-        self.time_label = tk.Label(self.frame, font=(config.LABEL_FONT[0], 9, "bold"), 
+        self.time_label = tk.Label(self.frame, font=(config.LABEL_FONT[0], max(8, config.LABEL_FONT[1] - 2), "bold"), 
                                    bg=self.T["hdr_bg"], fg=self.T["text"])
         self.time_label.pack(side=tk.RIGHT, padx=(2, 5))
 
@@ -72,7 +72,8 @@ class SystemPanel:
             base_dir = os.path.dirname(__file__)
             header_assets = os.path.join(base_dir, "assets", "header")
             _resample = getattr(Image, 'Resampling', Image).LANCZOS
-            size = (18, 18)
+            sz = max(16, int(config.LABEL_FONT[1] * 1.6))
+            size = (sz, sz)
 
             icon_files = {
                 "wifi_on": "wifi_on.png", "wifi_off": "wifi_off.png",
@@ -86,7 +87,7 @@ class SystemPanel:
                 path = os.path.join(header_assets, filename)
                 if os.path.exists(path):
                     img = Image.open(path).convert("RGBA").resize(size, _resample)
-                    if self.is_dark and key == "shift":
+                    if not self.is_dark and key == "shift":
                         # Invert RGB while preserving Alpha
                         r, g, b, a = img.split()
                         rgb = Image.merge("RGB", (r, g, b))
@@ -229,6 +230,9 @@ class DigiCalGUI:
         self._active_dialog_close_fn = None   # close callable
         self._transaction_dialog_open = False # True while dialog is visible
 
+        # ── Laptop keyboard emulation state ────────────────────────────────
+        self._laptop_shift_active = False
+
         # Create UI
         self.create_widgets()
         self.switch_mode("calculator")
@@ -279,9 +283,8 @@ class DigiCalGUI:
                         selectbackground=T["accent"], selectforeground="#FFFFFF",
                         arrowcolor=T["accent"])
         style.map("TCombobox",
-                  fieldbackground=[("readonly", T["entry_bg"])],
-                  foreground=[("readonly", T["entry_fg"])])
-                  
+                  fieldbackground=[("focus", T["accent"]), ("readonly", T["entry_bg"])],
+                  foreground=[("focus", T["bg"]), ("readonly", T["entry_fg"])])
         # Scale the dropdown listbox popout explicitly
         self.root.option_add("*TCombobox*Listbox.font", config.LABEL_FONT)
         self.root.option_add("*TCombobox*Listbox.background", T["entry_bg"])
@@ -289,7 +292,7 @@ class DigiCalGUI:
                   
         style.configure("Treeview",         background=T["tree_even"],
                         fieldbackground=T["tree_even"], foreground=T["tree_fg"],
-                        rowheight=20, font=config.LABEL_FONT)
+                        rowheight=int(config.LABEL_FONT[1] * 2.2), font=config.LABEL_FONT)
         style.configure("Treeview.Heading", background=T["hdr_bg"],
                         foreground=T["accent"],
                         font=(config.LABEL_FONT[0], config.LABEL_FONT[1], "bold"))
@@ -451,6 +454,10 @@ class DigiCalGUI:
     def create_widgets(self):
         """Create main UI components"""
         T = self.T
+        
+        self.root.bind_all("<FocusIn>", self._on_global_focus_in, add="+")
+        self.root.bind_all("<FocusOut>", self._on_global_focus_out, add="+")
+        
         # Top bar
         self.top_frame = tk.Frame(self.root, bg=T["hdr_bg"], height=50)
         self.top_frame.pack(fill=tk.X, padx=2, pady=2)
@@ -460,10 +467,12 @@ class DigiCalGUI:
             base_dir = os.path.dirname(__file__)
             _app_img_path = os.path.join(base_dir, "assets", "apps.png")
             _resample = getattr(Image, 'Resampling', Image).LANCZOS
-            _raw_img = Image.open(_app_img_path).resize((18, 18), _resample)
+            app_sz = max(16, int(config.LABEL_FONT[1] * 1.6))
+            icon_sz = max(12, int(config.LABEL_FONT[1] * 1.25))
+            _raw_img = Image.open(_app_img_path).resize((app_sz, app_sz), _resample)
             self._apps_icon = ImageTk.PhotoImage(_raw_img)
-            self._icon_success = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "right.png")).resize((14, 14), _resample))
-            self._icon_error = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "wrong.png")).resize((14, 14), _resample))
+            self._icon_success = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "right.png")).resize((icon_sz, icon_sz), _resample))
+            self._icon_error = ImageTk.PhotoImage(Image.open(os.path.join(base_dir, "assets", "wrong.png")).resize((icon_sz, icon_sz), _resample))
         except Exception:
             self._apps_icon = None
             self._icon_success = None
@@ -480,9 +489,10 @@ class DigiCalGUI:
         ).pack(side=tk.LEFT, padx=(4, 2))
 
         # Center: app title (absolutely centered, shifted left slightly for visual weight of 'g')
+        title_size = max(16, config.BUTTON_FONT[1] + 4)
         title_label = tk.Label(
             self.top_frame, text=self.tr("DigiCal"),
-            font=(config.BUTTON_FONT[0], 16, "bold"),
+            font=(config.BUTTON_FONT[0], title_size, "bold"),
             bg=T["hdr_bg"], fg=T["accent"]
         )
         title_label.place(relx=0.49, rely=0.45, anchor=tk.CENTER)
@@ -552,6 +562,9 @@ class DigiCalGUI:
 
         self.content_frame = tk.Frame(self.root, bg=T["bg"])
         self.content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=3)
+
+        # ── Global laptop keyboard binding (emulates physical keypad) ────
+        self.root.bind('<Key>', self._on_laptop_key)
 
 
     def clear_content_frame(self):
@@ -642,9 +655,6 @@ class DigiCalGUI:
         # On the home screen ESC opens the App Launcher
         self.root.bind("<Escape>", lambda e: self._show_app_launcher())
 
-        # Bind keyboard
-        self.root.bind('<Key>', self.on_key_press)
-
         # Reset line products if not set
         if not hasattr(self, '_line_products'):
             self._line_products = {}
@@ -708,26 +718,259 @@ class DigiCalGUI:
             except:
                 pass
     
-    def on_key_press(self, event):
-        """Handle keyboard input"""
-        if self.current_mode != "calculator":
+    # ── Laptop keyboard → physical keypad emulation ───────────────────
+    # Maps laptop keys to the 35 physical keypad actions so you can test
+    # the full DigiCal experience without the Raspberry Pi hardware.
+    #
+    # Mapping table (see artifact/walkthrough for the visual cheat-sheet):
+    #   DIGITS:      Numpad 0-9 / regular 0-9  → digit_0 … digit_9
+    #   DOUBLE ZERO: z / numpad Insert(0)       → digit_00  (via "z")
+    #   DECIMAL:     . / numpad Decimal          → decimal
+    #   OPERATORS:   + - * /  (numpad or main)   → op_plus/minus/mul/div
+    #   PERCENT:     %  (Shift+5)                → percent
+    #   EQUALS:      = / Enter / numpad Enter    → equals
+    #   CLEAR:       Delete                      → all_clear (AC)
+    #   BACKSPACE:   Backspace                   → clear_last (C/CE)
+    #   MENU:        m                           → menu
+    #   GRAPH:       g                           → graph
+    #   SALES:       s                           → sales
+    #   EXPENSE:     x                           → expense
+    #   DUE:         d                           → due
+    #   QR/PAYMENT:  q                           → qr_cycle
+    #   F1:          F1                          → f1
+    #   SHIFT:       CapsLock                    → shift (toggle)
+    #   ARROWS:      ↑ ↓ ← →                    → dir_up/down/left/right
+    #   M+:          p  (plus-memory)            → mem_plus  / tax_plus  (shifted)
+    #   M-:          n  (neg-memory)             → mem_minus / tax_minus (shifted)
+    #   MR:          r                           → mem_recall
+
+    # keysym → action  (regular / non-shifted)
+    _LAPTOP_KEY_MAP = {
+        # ── Digits (main keyboard) ────────────────────────────────
+        '0': 'digit_0',  '1': 'digit_1',  '2': 'digit_2',
+        '3': 'digit_3',  '4': 'digit_4',  '5': 'digit_5',
+        '6': 'digit_6',  '7': 'digit_7',  '8': 'digit_8',
+        '9': 'digit_9',
+        # ── Digits (numpad — keysym names) ────────────────────────
+        'KP_0': 'digit_0',  'KP_1': 'digit_1',  'KP_2': 'digit_2',
+        'KP_3': 'digit_3',  'KP_4': 'digit_4',  'KP_5': 'digit_5',
+        'KP_6': 'digit_6',  'KP_7': 'digit_7',  'KP_8': 'digit_8',
+        'KP_9': 'digit_9',
+        'KP_Insert': 'digit_0',  # numpad 0 (NumLock off)
+        'KP_End':    'digit_1',  'KP_Down':  'digit_2',
+        'KP_Next':   'digit_3',  'KP_Left':  'digit_4',
+        'KP_Begin':  'digit_5',  'KP_Right': 'digit_6',
+        'KP_Home':   'digit_7',  'KP_Up':    'digit_8',
+        'KP_Prior':  'digit_9',
+        # ── Double zero ───────────────────────────────────────────
+        'z': 'digit_00',
+        # ── Decimal ───────────────────────────────────────────────
+        'period':     'decimal',
+        'KP_Decimal': 'decimal',
+        'KP_Delete':  'decimal',  # numpad dot (NumLock off)
+        # ── Operators ─────────────────────────────────────────────
+        'plus':        'op_plus',   'KP_Add':      'op_plus',
+        'minus':       'op_minus',  'KP_Subtract': 'op_minus',
+        'asterisk':    'op_mul',    'KP_Multiply': 'op_mul',
+        'slash':       'op_div',    'KP_Divide':   'op_div',
+        # ── Percent ───────────────────────────────────────────────
+        'percent': 'percent',
+        # ── Equals / Enter ────────────────────────────────────────
+        'equal':    'equals',
+        'Return':   'equals',
+        'KP_Enter': 'equals',
+        # ── Clear / Backspace ─────────────────────────────────────
+        'Delete':    'all_clear',
+        'BackSpace': 'clear_last',
+        # ── Menu / Mode keys ──────────────────────────────────────
+        'm': 'menu',
+        'g': 'graph',
+        's': 'sales',
+        'x': 'expense',
+        'd': 'due',
+        'q': 'qr_cycle',
+        # ── F1 ────────────────────────────────────────────────────
+        'F1': 'f1',
+        # ── Home ──────────────────────────────────────────────────
+        'Home': 'home',
+        # ── Shift (CapsLock) ──────────────────────────────────────
+        'Caps_Lock': 'shift',
+        # ── Direction keys ────────────────────────────────────────
+        'Up':    'dir_up',
+        'Down':  'dir_down',
+        'Left':  'dir_left',
+        'Right': 'dir_right',
+        # ── Memory keys ───────────────────────────────────────────
+        'p': 'mem_plus',    # P for Plus-memory  (SHIFT → tax_plus)
+        'n': 'mem_minus',   # N for Neg-memory   (SHIFT → tax_minus)
+        'r': 'mem_recall',  # R for Recall
+    }
+
+    # Keys that have shifted variants (mirrors physical SHIFT_MAP)
+    _LAPTOP_SHIFT_OVERRIDES = {
+        'mem_plus':  'tax_plus',
+        'mem_minus': 'tax_minus',
+        'home': 'home_calculator',
+    }
+
+    def _on_global_focus_in(self, event):
+        w = event.widget
+        try:
+            # -- 1. Automatic Canvas Scrolling (Vertical & Horizontal) --
+            if w.winfo_class() not in ("Toplevel", "Frame", "Canvas"):
+                parent = w.master
+                while parent:
+                    if parent.winfo_class() == "Canvas":
+                        curr = w
+                        y_rel = 0
+                        x_rel = 0
+                        while curr and curr.master != parent:
+                            y_rel += curr.winfo_y()
+                            x_rel += curr.winfo_x()
+                            curr = curr.master
+                            
+                        # Vertical
+                        total_h = curr.winfo_height()
+                        if total_h > 0:
+                            top_frac = y_rel / total_h
+                            bottom_frac = (y_rel + w.winfo_height()) / total_h
+                            v_top, v_bottom = parent.yview()
+                            if v_bottom - v_top < 1.0: # only if scrollable
+                                if top_frac < v_top:
+                                    parent.yview_moveto(max(0, top_frac - 0.05))
+                                elif bottom_frac > v_bottom:
+                                    parent.yview_moveto(min(1.0, bottom_frac - (v_bottom - v_top) + 0.05))
+                                    
+                        # Horizontal
+                        total_w = curr.winfo_width()
+                        if total_w > 0:
+                            left_frac = x_rel / total_w
+                            right_frac = (x_rel + w.winfo_width()) / total_w
+                            h_left, h_right = parent.xview()
+                            if h_right - h_left < 1.0: # only if scrollable
+                                if left_frac < h_left:
+                                    parent.xview_moveto(max(0, left_frac - 0.05))
+                                elif right_frac > h_right:
+                                    parent.xview_moveto(min(1.0, right_frac - (h_right - h_left) + 0.05))
+                        break
+                    parent = parent.master
+                    
+            # -- 2. Keyboard & Highlighting Adjustments --
+            wtype = w.winfo_class()
+            if wtype == "TCombobox":
+                self._last_combobox = w
+                if not getattr(w, '_cb_intercepted', False):
+                    w._cb_intercepted = True
+                    for key in ('<Up>', '<Down>', '<Left>', '<Right>', '<Return>', '<Escape>'):
+                        w.bind(key, self._on_combobox_key_intercept, add="+")
+                    
+            if not getattr(w, '_orig_bg', False):
+                w._orig_bg = w.cget('bg')
+                w._orig_fg = w.cget('fg')
+            if wtype in ("Checkbutton", "Button"):
+                w.config(bg=self.T["accent"], fg=self.T["bg"])
+            elif wtype in ("Entry", "Text", "TEntry"):
+                w.config(highlightbackground=self.T["accent"], highlightthickness=2)
+        except Exception:
+            pass
+
+    def _on_global_focus_out(self, event):
+        w = event.widget
+        try:
+            wtype = w.winfo_class()
+            if wtype in ("Checkbutton", "Button"):
+                if getattr(w, '_orig_bg', None):
+                    w.config(bg=w._orig_bg, fg=w._orig_fg)
+            elif wtype in ("Entry", "Text", "TEntry"):
+                w.config(highlightbackground=self.T["shadow_dark"], highlightthickness=1)
+        except Exception:
+            pass
+
+    def _on_combobox_key_intercept(self, event):
+        # Allow events that we generated manually to pass through!
+        if getattr(self, '_in_laptop_key', False):
+            return None
+        # It's a real keyboard press: block standard Combobox processing, 
+        # and route directly to our mapping engine.
+        self._on_laptop_key(event)
+        return "break"
+
+    def _on_laptop_key(self, event):
+        """Global keyboard handler — translates laptop keys into keypad
+        actions and routes them through _dispatch_keypad_action.
+        Works in ALL modes (calculator, menus, navigation, dialogs)."""
+
+        sym = event.keysym  # e.g. 'a', 'Return', 'KP_5', 'Up'
+
+        # Ignore modifier-only presses (Shift_L, Control_L, etc.)
+        if sym in ('Shift_L', 'Shift_R', 'Control_L', 'Control_R',
+                   'Alt_L', 'Alt_R', 'Super_L', 'Super_R'):
             return
-        
-        key = event.char
-        if key in '0123456789.%':
-            self.calculator_button_click(key)
-        elif key in '+-':
-            self.calculator_button_click(key)
-        elif key == '*':
-            self.calculator_button_click('×')
-        elif key == '/':
-            self.calculator_button_click('÷')
-        elif key in ['\r', '\n', '=']:
-            self.calculator_button_click('=')
-        elif event.keysym == 'BackSpace':
-            self.calculator_button_click('CE')
-        # ESC on calculator mode is handled by the root binding (opens app launcher)
-        # so we intentionally do NOT handle Escape here
+
+        # Skip if focus is in a text Entry (let the user type freely)
+        is_popdown = False
+        try:
+            focused = self.root.focus_get()
+        except KeyError:
+            # Tkinter throws KeyError('popdown') when a ttk Combobox dropdown is open.
+            focused = None
+            is_popdown = True
+            
+        if focused and focused.winfo_class() in ('Entry', 'Text', 'TEntry'):
+            # But still allow Enter, Escape, and arrow keys in entries
+            if sym not in ('Return', 'KP_Enter', 'Escape',
+                           'Up', 'Down', 'Left', 'Right', 'BackSpace', 'Delete'):
+                return
+
+        # Escape is handled separately by mode-specific bindings
+        if sym == 'Escape':
+            return
+
+        action = self._LAPTOP_KEY_MAP.get(sym)
+        if not action:
+            return
+            
+        # Re-entrancy guard: if we are already processing a key and decide to
+        # event_generate(<Down>) for native handling, ignore that generated event!
+        if getattr(self, '_in_laptop_key', False):
+            return
+            
+        self._in_laptop_key = True
+        try:
+            # ── Handle SHIFT toggle (CapsLock) ────────────────────────
+            if action == 'shift':
+                self._laptop_shift_active = not self._laptop_shift_active
+                if self._laptop_shift_active:
+                    self._dispatch_keypad_action('shift_on')
+                else:
+                    self._dispatch_keypad_action('shift_off')
+                return
+    
+            # ── Apply shift override if active ────────────────────────
+            if self._laptop_shift_active:
+                shifted = self._LAPTOP_SHIFT_OVERRIDES.get(action)
+                if shifted:
+                    action = shifted
+                # Consume shift (one-shot, same as physical keypad)
+                self._laptop_shift_active = False
+                self._dispatch_keypad_action('shift_off')
+    
+            self._dispatch_keypad_action(action)
+        finally:
+            self._in_laptop_key = False
+            
+        # ── Suppress Native Tkinter Binding ───────────────────────
+        # Tkinter's native Combobox has built-in <Down>, <Up>, and <Return> 
+        # handlers that conflict with our explicit tab traversal routing. 
+        # By returning "break", we stop those from executing *after* our method.
+        if action.startswith('dir_') or action == 'equals' or action == 'Escape':
+            if is_popdown:
+                return "break"
+            try:
+                if focused and focused.winfo_exists() and focused.winfo_class() == "TCombobox":
+                    return "break"
+            except Exception:
+                pass
     
     def show_sales_mode(self):
         """Show sales entry interface"""
@@ -1009,6 +1252,26 @@ class DigiCalGUI:
             handler_name = trans[9] if len(trans) > 9 and trans[9] else "-"
             tag = "even" if i % 2 == 0 else "odd"
             trans_tree.insert("", tk.END, values=(date, t_type, amount, category, payment_method, handler_name), tags=(tag,))
+
+        def _on_tab_change(e):
+            sel = notebook.select()
+            if not sel: return
+            w = self.root.nametowidget(sel)
+            for c in w.winfo_children():
+                if c.winfo_class() == "Treeview":
+                    c.focus_set()
+                    if not c.selection() and c.get_children():
+                        c.selection_set(c.get_children()[0])
+                        c.focus(c.get_children()[0])
+                    break
+
+        notebook.bind("<<NotebookTabChanged>>", _on_tab_change)
+
+        # Initial focus setup for keypad navigation
+        calc_tree.focus_set()
+        if calc_tree.get_children():
+            calc_tree.selection_set(calc_tree.get_children()[0])
+            calc_tree.focus(calc_tree.get_children()[0])
 
 
     def show_graphs_mode(self):
@@ -1355,7 +1618,7 @@ class DigiCalGUI:
                   activebackground=T["shadow_dark"],
                   command=_close).pack(side=tk.LEFT, padx=6)
         tk.Label(hdr, text=title,
-                 font=(config.BUTTON_FONT[0], 9, "bold"),
+                 font=(config.BUTTON_FONT[0], max(9, config.BUTTON_FONT[1] - 3), "bold"),
                  bg=T["hdr_bg"], fg=T["text"]).pack(side=tk.LEFT, padx=4)
 
         self.root.bind("<Escape>", lambda e: _close())
@@ -1378,7 +1641,7 @@ class DigiCalGUI:
         tk.Label(hdr, text=" " + self.tr("DigiCal Apps"),
                  image=getattr(self, '_apps_icon', None),
                  compound=tk.LEFT if getattr(self, '_apps_icon', None) else tk.NONE,
-                 font=(config.BUTTON_FONT[0], 9, "bold"),
+                 font=(config.BUTTON_FONT[0], max(9, config.BUTTON_FONT[1] - 3), "bold"),
                  bg=T["hdr_bg"], fg=T["accent"]).pack(side=tk.LEFT, padx=8)
 
         self._app_launcher_open = True
@@ -2589,17 +2852,29 @@ class DigiCalGUI:
         tree.tag_configure("even", background="#2C3E50", foreground="white")
         tree.tag_configure("hasdue", foreground="#E74C3C")
         
-        customers = self.db.get_customers_with_dues()
-        if customers:
-            for i, (cid, name, phone, total_due) in enumerate(customers):
-                tag = "even" if i % 2 == 0 else "odd"
-                tags = (tag, "hasdue") if total_due > 0 else (tag,)
-                tree.insert("", tk.END,
-                            values=(cid, name, phone or "-", f"{total_due:.2f}"),
-                            tags=tags)
-        else:
-            tree.insert("", tk.END, values=("-", self.tr("No customers yet"), "-", "-"))
+        def _load_customers():
+            for item in tree.get_children():
+                tree.delete(item)
+            customers = self.db.get_customers_with_dues()
+            if customers:
+                for i, (cid, name, phone, total_due) in enumerate(customers):
+                    tag = "even" if i % 2 == 0 else "odd"
+                    tags = (tag, "hasdue") if total_due > 0 else (tag,)
+                    tree.insert("", tk.END,
+                                values=(cid, name, phone or "-", f"{total_due:.2f}"),
+                                tags=tags)
+            else:
+                tree.insert("", tk.END, values=("-", self.tr("No customers yet"), "-", "-"))
+
+        _load_customers()
         
+        # Auto-focus the list for keypad navigation
+        tree.focus_set()
+        children = tree.get_children()
+        if children:
+            tree.selection_set(children[0])
+            tree.focus(children[0])
+            
         def on_row_click(event):
             item = tree.focus()
             if not item:
@@ -2901,6 +3176,13 @@ class DigiCalGUI:
                  text=self.tr("● Red = low stock (< {}% remaining)").format(int(low_pct * 100)),
                  font=(config.LABEL_FONT[0], 7), bg=T["bg"], fg=T["danger"]).pack(anchor=tk.W, padx=4)
         
+        # Auto-focus the list for keypad navigation
+        tree.focus_set()
+        children = tree.get_children()
+        if children:
+            tree.selection_set(children[0])
+            tree.focus(children[0])
+
         # ── wire buttons ─────────────────────────────────────────────────────
         def _get_selected():
             sel = tree.focus()
@@ -3084,16 +3366,16 @@ class DigiCalGUI:
             self.clear_content_frame()
             self.show_handlers_mode()
 
-        self._neu_btn(ctrl, self.tr("+ Add Handler"), command=lambda: self.show_create_handler_dialog(on_close=_refresh),
+        self._neu_btn(ctrl, self.tr("+ Add"), command=lambda: self.show_create_handler_dialog(on_close=_refresh),
                      kind="equals").pack(side=tk.LEFT, padx=3)
 
-        edit_btn = self._neu_btn(ctrl, "\u270e " + self.tr("Modify Handler"), kind="mode")
+        edit_btn = self._neu_btn(ctrl, "\u270e " + self.tr("Modify"), kind="mode")
         edit_btn.pack(side=tk.LEFT, padx=3)
 
-        del_btn = self._neu_btn(ctrl, "\u2715 " + self.tr("Delete Handler"), kind="danger")
+        del_btn = self._neu_btn(ctrl, "\u2715 " + self.tr("Delete"), kind="danger")
         del_btn.pack(side=tk.LEFT, padx=3)
 
-        self._neu_btn(ctrl, "\u2713 " + self.tr("Set Handler"),
+        self._neu_btn(ctrl, "\u2713 " + self.tr("Set"),
                      command=lambda: self._handler_set_active(_get_selected()),
                      kind="equals").pack(side=tk.LEFT, padx=3)
 
@@ -3131,6 +3413,13 @@ class DigiCalGUI:
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
         
+        # Auto-focus the list for keypad navigation
+        tree.focus_set()
+        children = tree.get_children()
+        if children:
+            tree.selection_set(children[0])
+            tree.focus(children[0])
+
         # ── wire buttons ─────────────────────────────────────────────────────
         def _get_selected():
             sel = tree.focus()
@@ -3356,6 +3645,17 @@ class DigiCalGUI:
             self._show_toast("TAX feature coming soon", kind="info")
             return
 
+        # ── Home (Calculator) ───────────────────────────────────────
+        if action == "home_calculator":
+            for child in self.root.winfo_children():
+                if child.winfo_manager() == "place":
+                    child.destroy()
+            if getattr(self, '_app_launcher_open', False):
+                self._app_launcher_open = False
+                self.root.bind("<Escape>", lambda e: self._show_app_launcher())
+            self.switch_mode("calculator")
+            return
+
         # ── Menu (App Launcher) ─────────────────────────────────────
         if action == "menu":
             if getattr(self, '_app_launcher_open', False):
@@ -3480,10 +3780,39 @@ class DigiCalGUI:
             return
 
         # 2. Global Navigation for Settings/Dialogs/Calculator
-        focused = self.root.focus_get()
+        try:
+            focused = self.root.focus_get()
+        except KeyError:
+            # A ttk Combobox dropdown is currently open!
+            try:
+                cb = getattr(self, '_last_combobox', None)
+                if cb:
+                    pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
+                    lb = f"{pd}.f.l"
+                    if action == 'dir_left':
+                        self.root.tk.call('event', 'generate', lb, '<Escape>')
+                    elif action in ('dir_right', 'equals'):
+                        self.root.tk.call('event', 'generate', lb, '<Return>')
+                    elif action in ('dir_up', 'dir_down'):
+                        self.root.tk.call('event', 'generate', lb, f'<{keysym}>')
+            except Exception:
+                pass
+            return
+
         if focused is None:
             focused = self.root
-            
+
+        # Calculator mode specific overrides
+        if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False):
+            if action == "dir_down":
+                if hasattr(self, '_product_bar_cb'):
+                    self._product_bar_cb.focus_set()
+                    self._product_bar_cb.event_generate('<Down>')
+                return
+            elif action == "dir_left":
+                self.root.focus_set()  # remove focus
+                return
+
         # If equals, inject Return / Activate
         if action == "equals":
             # For buttons, invoke them directly or generate Return
@@ -3491,16 +3820,30 @@ class DigiCalGUI:
             if wtype in ("Button", "TButton"):
                 focused.invoke()
             else:
-                focused.event_generate("<Return>", when="tail")
+                focused.event_generate("<Return>")
             return
             
         # Smart Focus jumping for left/right/up/down
         wtype = focused.winfo_class()
         
-        # If inside a list/dropdown, let Up/Down scroll natively
-        if wtype in ("TCombobox", "Treeview", "Listbox"):
+        if wtype in ("Treeview", "Listbox"):
             if action in ("dir_up", "dir_down"):
-                focused.event_generate(f"<{keysym}>", when="tail")
+                focused.event_generate(f"<{keysym}>")
+                return
+            elif action == "dir_right" or action == "equals":
+                # Trigger internal binding for selection/double-click
+                focused.event_generate("<Return>")
+                return
+        elif wtype == "TCombobox":
+            if action == "dir_right":
+                focused.event_generate("<Down>") # Open the list
+                return
+            elif action == "dir_left":
+                self.root.focus_set() # Get out of the list
+                return
+        elif wtype in ("Checkbutton", "TCheckbutton"):
+            if action == "dir_right":
+                focused.invoke() # Toggle the checkbox
                 return
                 
         # By default, use Tab traversal hierarchy for D-Pad

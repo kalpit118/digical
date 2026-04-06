@@ -26,10 +26,10 @@ def set_font_scale(scale: str):
     """Adjusts all system fonts up or down based on a severity profile."""
     global DISPLAY_FONT, BUTTON_FONT, LABEL_FONT
     scales = {
-        "Small": -2,
-        "Medium": 0,
-        "Large": 2,
-        "Extra Large": 4
+        "Small": 2,
+        "Medium": 4,
+        "Large": 6,
+        "Extra Large": 8
     }
     offset = scales.get(scale, 0)
     
@@ -137,7 +137,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "digical.db")
 CURRENCY_SYMBOL = "₹"
 
 # Payment Methods
-PAYMENT_METHODS = ["UPI", "Cash", "Due"]
+PAYMENT_METHODS = ["Cash", "UPI", "Due"]
 
 # Default Categories
 DEFAULT_SALES_CATEGORIES = [
