@@ -1,5 +1,4 @@
-"""
-Keypad Driver for DigiCal — 7×5 Matrix Keypad on Raspberry Pi Zero 2W
+"""Keypad Driver for DigiCal — 7×5 Matrix Keypad on Raspberry Pi Zero 2W
 Scans a 7-column × 5-row matrix and returns key names like R1C1 … R5C7.
 
 Pin wiring (active-low with internal pull-ups):
@@ -33,8 +32,8 @@ How it works:
   De-bounce is handled with a short settle delay + confirmation re-read.
 
 Key Mapping (7 columns × 5 rows):
-  Row 1: R1C1=Right  R1C2=Down   R1C3=Left  R1C4=M-/TAX-  R1C5=M+/TAX+  R1C6=MR  R1C7=SHIFT
-  Row 2: R2C1=Graph  R2C2=%      R2C3=÷     R2C4=9        R2C5=8        R2C6=7   R2C7=MENU
+  Row 1: R1C1=Right  R1C2=Down   R1C3=Left  R1C4=M-  R1C5=M+  R1C6=MR  R1C7=BACK
+  Row 2: R2C1=Graph  R2C2=%      R2C3=÷     R2C4=9   R2C5=8   R2C6=7   R2C7=MENU
   Row 3: R3C1=QR     R3C2=−      R3C3=×     R3C4=6        R3C5=5        R3C6=4   R3C7=AC
   Row 4: R4C1=F1     R4C2=SALES  R4C3=+     R4C4=3        R4C5=2        R4C6=1   R4C7=C
   Row 5: R5C1=Up     R5C2=DUE    R5C3=EXP   R5C4==        R5C5=.        R5C6=00  R5C7=0
@@ -78,14 +77,14 @@ KEY_NAMES = [
 # To remap a key, change only the value in this dict.
 
 KEY_MAP = {
-    # Row 1: Direction keys, Memory, SHIFT
+    # Row 1: Direction keys, Memory, BACK
     "R1C1": "dir_right",
     "R1C2": "dir_down",
     "R1C3": "dir_left",
     "R1C4": "mem_minus",
     "R1C5": "mem_plus",
     "R1C6": "mem_recall",
-    "R1C7": "shift",
+    "R1C7": "back",         # Back / History navigation
 
     # Row 2: Graph, %, ÷, 9, 8, 7, MENU
     "R2C1": "graph",
@@ -124,11 +123,6 @@ KEY_MAP = {
     "R5C7": "digit_0",
 }
 
-# SHIFT + key overrides (only keys that have a secondary function)
-SHIFT_MAP = {
-    "R1C4": "tax_minus",   # SHIFT + M- = TAX-
-    "R1C5": "tax_plus",    # SHIFT + M+ = TAX+
-}
 
 # Timing
 DEBOUNCE_MS = 20        # milliseconds to wait after detecting a press
@@ -146,7 +140,6 @@ class Keypad:
         self._running = False
         self._thread = None
         self._prev_keys = set()
-        self._shift_active = False
 
         if not _HAS_GPIO:
             print("[Keypad] RPi.GPIO not available — running in stub mode.")
@@ -225,22 +218,8 @@ class Keypad:
     # ── Internal ──────────────────────────────────────────────────────
 
     def _resolve_action(self, key_name):
-        """Resolve a physical key name to its logical action(s),
-        taking SHIFT state into account."""
-        if key_name == "R1C7":
-            # SHIFT key itself — toggle shift and fire special action
-            self._shift_active = True
-            return "shift_on"
-
-        if self._shift_active:
-            self._shift_active = False
-            # Check shifted mapping first, fall back to normal
-            action = SHIFT_MAP.get(key_name, KEY_MAP.get(key_name))
-            return ["shift_off", action] if action else "shift_off"
-        else:
-            action = KEY_MAP.get(key_name)
-
-        return action
+        """Resolve a physical key name to its logical action string."""
+        return KEY_MAP.get(key_name)
 
     def _scan_loop(self):
         """Continuous scanning loop with debounce."""
@@ -293,9 +272,7 @@ if __name__ == "__main__":
 
     print("Key Map:")
     for key, action in sorted(KEY_MAP.items()):
-        shift_action = SHIFT_MAP.get(key, "")
-        shift_str = f"  (SHIFT → {shift_action})" if shift_action else ""
-        print(f"  {key} → {action}{shift_str}")
+        print(f"  {key} → {action}")
     print()
 
     kp = Keypad()
