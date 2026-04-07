@@ -811,6 +811,8 @@ class DigiCalGUI:
         'mem_plus':  'tax_plus',
         'mem_minus': 'tax_minus',
         'home': 'home_calculator',
+        # Universal combo: Shift + Menu → safely return to Home Calculator
+        'menu': 'home_calculator',
     }
 
     def _on_global_focus_in(self, event):
@@ -3805,12 +3807,57 @@ class DigiCalGUI:
         # Calculator mode specific overrides
         if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False):
             if action == "dir_down":
+                # Down: open the product dropdown (or navigate within it if already open)
                 if hasattr(self, '_product_bar_cb'):
-                    self._product_bar_cb.focus_set()
-                    self._product_bar_cb.event_generate('<Down>')
+                    cb = self._product_bar_cb
+                    cb.focus_set()
+                    cb.event_generate('<Down>')  # opens dropdown if closed, or moves down in list
+                return
+            elif action == "dir_right":
+                # Right: select the currently highlighted item in the product dropdown
+                if hasattr(self, '_product_bar_cb'):
+                    cb = self._product_bar_cb
+                    focused_widget = focused
+                    # Check if the dropdown popdown listbox is currently open
+                    try:
+                        pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
+                        lb = f"{pd}.f.l"
+                        # Simulate Return on the listbox to confirm selection
+                        self.root.tk.call('event', 'generate', lb, '<Return>')
+                    except Exception:
+                        pass
                 return
             elif action == "dir_left":
-                self.root.focus_set()  # remove focus
+                # Left: collapse the product dropdown if open, or release focus from
+                # header bar widgets (Apps button, product combobox, refresh button)
+                # so that the = key doesn't misbehave with SELECT.
+                if hasattr(self, '_product_bar_cb'):
+                    cb = self._product_bar_cb
+                    # Check if combobox popdown is open and close it
+                    try:
+                        pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
+                        lb = f"{pd}.f.l"
+                        self.root.tk.call('event', 'generate', lb, '<Escape>')
+                        # After collapsing, also release focus back to root
+                        self.root.after(10, self.root.focus_set)
+                        return
+                    except Exception:
+                        pass
+                # If focus is on any widget in the product bar frame or top frame,
+                # release the highlighted cursor so = (equals) acts as calculator =
+                try:
+                    if focused and focused.winfo_exists():
+                        # Walk up the widget hierarchy to check if it's inside the header/product bar
+                        w = focused
+                        while w:
+                            if w in (getattr(self, 'product_bar_frame', None),
+                                     getattr(self, 'top_frame', None)):
+                                self.root.focus_set()  # release focus
+                                return
+                            w = w.master
+                except Exception:
+                    pass
+                self.root.focus_set()  # release focus in all left-key cases on calculator
                 return
 
         # If equals, inject Return / Activate
