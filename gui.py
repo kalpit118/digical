@@ -894,21 +894,23 @@ class DigiCalGUI:
         return "break"
 
     def _on_shift_press(self, event):
-        """Track physical Shift key press — activates the shift state."""
+        """Track physical Shift key press — activates the one-shot shift latch."""
         if getattr(self, '_physical_shift_held', False):
-            return  # already held, ignore repeats
+            return  # already held, ignore key-repeat events
         self._physical_shift_held = True
         self._laptop_shift_active = True
         self._dispatch_keypad_action('shift_on')
 
     def _on_shift_release(self, event):
-        """Track physical Shift key release."""
+        """Track physical Shift key release.
+        The one-shot latch (_laptop_shift_active) stays TRUE so the NEXT key
+        pressed after releasing Shift still gets the shifted action.
+        The latch is consumed (cleared) inside _on_laptop_key when the next
+        action key fires — matching the user's described flow:
+          Shift pressed → Shift released → Menu pressed → Home Calculator.
+        """
         self._physical_shift_held = False
-        # Shift state is consumed one-shot when the next key is pressed;
-        # if nothing was pressed while holding Shift, cancel shift here.
-        if self._laptop_shift_active:
-            self._laptop_shift_active = False
-            self._dispatch_keypad_action('shift_off')
+        # Do NOT clear _laptop_shift_active here — let the next key consume it.
 
     def _on_laptop_key(self, event):
         """Global keyboard handler — translates laptop keys into keypad
@@ -2156,8 +2158,9 @@ class DigiCalGUI:
                 self._show_toast(self.tr("Download failed. Check connection."), kind="error")
 
         def _apply_up():
-            self._show_confirm(self.tr("Backup and update now? (Auto-restarts)"), lambda: _do_apply())
-            
+            # Skip confirmation popup — proceed directly to backup and apply
+            _do_apply()
+
         def _do_apply():
             up_status_var.set(self.tr("Backing up..."))
             self.root.update_idletasks()
