@@ -23,7 +23,7 @@ from handler_manager import HandlerManager
 from updater import Updater
 
 class SystemPanel:
-    """Displays system status icons (Battery, Wifi, Bluetooth) in the header."""
+    """Displays system status icons (Battery, Wifi) in the header."""
     def __init__(self, parent, theme, is_dark=False):
         self.parent = parent
         self.T = theme
@@ -31,15 +31,12 @@ class SystemPanel:
         self.frame = tk.Frame(parent, bg=self.T["hdr_bg"])
         self.frame.pack(side=tk.RIGHT, padx=5)
 
-        # Icons (Battery, Wifi, Bluetooth from right to left)
+        # Icons (Battery, Wifi from right to left)
         self.battery_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
         self.battery_label.pack(side=tk.RIGHT, padx=2)
 
         self.wifi_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
         self.wifi_label.pack(side=tk.RIGHT, padx=2)
-
-        self.bluetooth_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
-        self.bluetooth_label.pack(side=tk.RIGHT, padx=2)
 
         self.time_label = tk.Label(self.frame, font=(config.LABEL_FONT[0], max(8, config.LABEL_FONT[1] - 2), "bold"), 
                                    bg=self.T["hdr_bg"], fg=self.T["text"])
@@ -54,7 +51,6 @@ class SystemPanel:
         # Set initial default icons for instant startup
         self.battery_label.config(image=self.icons.get("bat100"))
         self.wifi_label.config(image=self.icons.get("wifi_off"))
-        self.bluetooth_label.config(image=self.icons.get("bt_off"))
         self.time_label.config(text=datetime.now().strftime("%I:%M %p •"))
         self.shift_label.config(image="")
         
@@ -77,7 +73,6 @@ class SystemPanel:
 
             icon_files = {
                 "wifi_on": "wifi_on.png", "wifi_off": "wifi_off.png",
-                "bt_on": "bluetooth_on.png", "bt_off": "bluetooth_off.png",
                 "bat0": "battery0.png", "bat10": "battery10.png",
                 "bat50": "battery50.png", "bat90": "battery90.png", "bat100": "battery100.png",
                 "shift": "shiftkey.png"
@@ -146,37 +141,15 @@ class SystemPanel:
                     if res: wifi_key = "wifi_on"
         except: pass
 
-        # 3. Bluetooth
-        bt_key = "bt_off"
-        try:
-            if is_win:
-                # Use a broader filter for Bluetooth radio devices
-                cmd = "powershell -Command \"Get-PnpDevice -Class Bluetooth -Status OK | Where-Object { $_.FriendlyName -like '*Bluetooth*' -and $_.FriendlyName -notlike '*Enumerator*' } | Select-Object -First 1\""
-                res = subprocess.check_output(cmd, shell=True, text=True).strip()
-                if res: bt_key = "bt_on"
-            else:
-                # Check rfkill and also bluetooth service state if possible
-                # More robust rfkill check: find the 'bluetooth' line specifically
-                res = subprocess.check_output("rfkill list bluetooth", shell=True, text=True).lower()
-                # Check if bluetooth is present and not blocked
-                if "bluetooth" in res and "soft blocked: no" in res and "hard blocked: no" in res:
-                    bt_key = "bt_on"
-                else:
-                    # Fallback check via systemctl if rfkill is ambiguous
-                    res = subprocess.check_output("systemctl is-active bluetooth", shell=True, text=True).strip()
-                    if res == "active": bt_key = "bt_on"
-        except: pass
-
         # Update UI in main thread
         now_time = datetime.now().strftime("%I:%M %p •")
-        self.frame.after(0, lambda: self._apply_icons(bat_key, wifi_key, bt_key, now_time))
+        self.frame.after(0, lambda: self._apply_icons(bat_key, wifi_key, now_time))
 
-    def _apply_icons(self, bat, wifi, bt, time_str):
+    def _apply_icons(self, bat, wifi, time_str):
         if not self.frame.winfo_exists():
             return
         if bat in self.icons: self.battery_label.config(image=self.icons[bat])
         if wifi in self.icons: self.wifi_label.config(image=self.icons[wifi])
-        if bt in self.icons: self.bluetooth_label.config(image=self.icons[bt])
         self.time_label.config(text=time_str)
 
 class DigiCalGUI:
@@ -215,6 +188,11 @@ class DigiCalGUI:
         self._apply_ttk_styles()
         self.root.configure(bg=self.T["bg"])
 
+        # Hide mouse cursor if setting is enabled
+        self.hide_cursor: bool = settings.get("hide_cursor", False)
+        if self.hide_cursor:
+            self.root.config(cursor="none")
+
         # Current mode
         self.current_mode = "calculator"
         self.current_graph_info = None # (func_name, args, kwargs)
@@ -231,7 +209,9 @@ class DigiCalGUI:
         self._transaction_dialog_open = False # True while dialog is visible
 
         # ── Laptop keyboard emulation state ────────────────────────────────
+        # _laptop_shift_active is set by CapsLock (toggle) or physical Shift key (press/release)
         self._laptop_shift_active = False
+        self._physical_shift_held = False  # True while Shift_L/Shift_R is physically held
 
         # Create UI
         self.create_widgets()
@@ -318,6 +298,9 @@ class DigiCalGUI:
             w.destroy()
         self.create_widgets()
         self.switch_mode(self.current_mode)
+        # Re-apply cursor setting after rebuild
+        if getattr(self, 'hide_cursor', False):
+            self.root.config(cursor="none")
 
     def _toggle_dark_mode(self, val: bool):
         """Persist dark_mode setting and apply theme immediately."""
@@ -565,6 +548,11 @@ class DigiCalGUI:
 
         # ── Global laptop keyboard binding (emulates physical keypad) ────
         self.root.bind('<Key>', self._on_laptop_key)
+        # Physical Shift key tracking (press and release) — for Shift+Menu combo
+        self.root.bind('<Shift_L>', self._on_shift_press, add='+')
+        self.root.bind('<Shift_R>', self._on_shift_press, add='+')
+        self.root.bind('<KeyRelease-Shift_L>', self._on_shift_release, add='+')
+        self.root.bind('<KeyRelease-Shift_R>', self._on_shift_release, add='+')
 
 
     def clear_content_frame(self):
@@ -579,6 +567,10 @@ class DigiCalGUI:
 
         if mode == "calculator":
             self.product_bar_frame.pack(fill=tk.X, padx=2, before=self.outer_display_frame)
+            # Restore product bar combobox key bindings for home mode
+            if hasattr(self, '_product_bar_cb'):
+                self._product_bar_cb.unbind('<Down>')
+                self._product_bar_cb.unbind('<Up>')
             # Make the display box fill the whole remaining window
             self.outer_display_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=(4, 0))
             self.display_frame.pack_propagate(True)   # allow expansion
@@ -587,6 +579,10 @@ class DigiCalGUI:
             self.live_display.config(font=("Consolas", 24, "bold"), pady=6)
             self.content_frame.pack_forget()          # hide; receipt is inside display_frame
         else:
+            # Block the product bar combobox from opening its dropdown in non-home modes
+            if hasattr(self, '_product_bar_cb'):
+                self._product_bar_cb.bind('<Down>', lambda e: "break")
+                self._product_bar_cb.bind('<Up>', lambda e: "break")
             self.product_bar_frame.pack_forget()
             self.outer_display_frame.pack(fill=tk.X, expand=False, padx=6, pady=(4, 2))
             self.display_frame.config(height=80)      # Fixed height for modes like Sales
@@ -897,6 +893,23 @@ class DigiCalGUI:
         self._on_laptop_key(event)
         return "break"
 
+    def _on_shift_press(self, event):
+        """Track physical Shift key press — activates the shift state."""
+        if getattr(self, '_physical_shift_held', False):
+            return  # already held, ignore repeats
+        self._physical_shift_held = True
+        self._laptop_shift_active = True
+        self._dispatch_keypad_action('shift_on')
+
+    def _on_shift_release(self, event):
+        """Track physical Shift key release."""
+        self._physical_shift_held = False
+        # Shift state is consumed one-shot when the next key is pressed;
+        # if nothing was pressed while holding Shift, cancel shift here.
+        if self._laptop_shift_active:
+            self._laptop_shift_active = False
+            self._dispatch_keypad_action('shift_off')
+
     def _on_laptop_key(self, event):
         """Global keyboard handler — translates laptop keys into keypad
         actions and routes them through _dispatch_keypad_action.
@@ -904,9 +917,13 @@ class DigiCalGUI:
 
         sym = event.keysym  # e.g. 'a', 'Return', 'KP_5', 'Up'
 
-        # Ignore modifier-only presses (Shift_L, Control_L, etc.)
-        if sym in ('Shift_L', 'Shift_R', 'Control_L', 'Control_R',
-                   'Alt_L', 'Alt_R', 'Super_L', 'Super_R'):
+        # Track physical Shift key separately (press/release)
+        if sym in ('Shift_L', 'Shift_R'):
+            # Handled by dedicated bindings — ignore here
+            return
+
+        # Ignore other modifier-only presses
+        if sym in ('Control_L', 'Control_R', 'Alt_L', 'Alt_R', 'Super_L', 'Super_R'):
             return
 
         # Skip if focus is in a text Entry (let the user type freely)
@@ -955,6 +972,7 @@ class DigiCalGUI:
                     action = shifted
                 # Consume shift (one-shot, same as physical keypad)
                 self._laptop_shift_active = False
+                self._physical_shift_held = False
                 self._dispatch_keypad_action('shift_off')
     
             self._dispatch_keypad_action(action)
@@ -1920,6 +1938,31 @@ class DigiCalGUI:
             activebackground=T["bg"], activeforeground=T["accent"],
             relief=tk.FLAT, bd=0,
             command=_on_full_toggle
+        ).pack(side=tk.RIGHT, padx=4)
+
+        # Hide Mouse Cursor Toggle
+        cursor_row = tk.Frame(c1, bg=T["bg"])
+        cursor_row.pack(fill=tk.X, pady=2)
+        tk.Label(cursor_row, text=self.tr("Hide Mouse Cursor"),
+                 font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).pack(side=tk.LEFT)
+        cursor_var = tk.BooleanVar(value=self.hide_cursor)
+        cursor_icon_text = "   " + self.tr("OFF") if not self.hide_cursor else "   " + self.tr("ON")
+
+        def _on_cursor_toggle():
+            val = cursor_var.get()
+            self.hide_cursor = val
+            self._save_settings({"hide_cursor": val})
+            self.root.config(cursor="none" if val else "")
+            flash_saved()
+
+        tk.Checkbutton(
+            cursor_row, text=cursor_icon_text, variable=cursor_var,
+            font=(config.BUTTON_FONT[0], config.BUTTON_FONT[1] - 3),
+            bg=T["bg"], fg=T["accent"],
+            selectcolor=T["bg_dark"],
+            activebackground=T["bg"], activeforeground=T["accent"],
+            relief=tk.FLAT, bd=0,
+            command=_on_cursor_toggle
         ).pack(side=tk.RIGHT, padx=4)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3804,7 +3847,7 @@ class DigiCalGUI:
         if focused is None:
             focused = self.root
 
-        # Calculator mode specific overrides
+        # Calculator mode specific overrides — product bar interactions are HOME ONLY
         if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False):
             if action == "dir_down":
                 # Down: open the product dropdown (or navigate within it if already open)
