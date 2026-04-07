@@ -208,10 +208,10 @@ class DigiCalGUI:
         self._active_dialog_close_fn = None   # close callable
         self._transaction_dialog_open = False # True while dialog is visible
 
-        # ── Laptop keyboard emulation state ────────────────────────────────
-        # _laptop_shift_active is set by CapsLock (toggle) or physical Shift key (press/release)
-        self._laptop_shift_active = False
-        self._physical_shift_held = False  # True while Shift_L/Shift_R is physically held
+        # ── Navigation history (Back key) ─────────────────────────────────
+        # Tracks the sequence of modes visited so the Back key can reverse them.
+        self._nav_stack = []          # list of mode strings e.g. ['calculator', 'sales']
+        self._nav_back_in_progress = False  # guard: don't push while popping
 
         # Create UI
         self.create_widgets()
@@ -548,11 +548,10 @@ class DigiCalGUI:
 
         # ── Global laptop keyboard binding (emulates physical keypad) ────
         self.root.bind('<Key>', self._on_laptop_key)
-        # Physical Shift key tracking (press and release) — for Shift+Menu combo
-        self.root.bind('<Shift_L>', self._on_shift_press, add='+')
-        self.root.bind('<Shift_R>', self._on_shift_press, add='+')
-        self.root.bind('<KeyRelease-Shift_L>', self._on_shift_release, add='+')
-        self.root.bind('<KeyRelease-Shift_R>', self._on_shift_release, add='+')
+        # Physical Shift key → Back navigation (fires on key release to avoid
+        # accidentally triggering while Shift is held for other purposes)
+        self.root.bind('<KeyRelease-Shift_L>', self._on_back_key, add='+')
+        self.root.bind('<KeyRelease-Shift_R>', self._on_back_key, add='+')
 
 
     def clear_content_frame(self):
@@ -561,7 +560,17 @@ class DigiCalGUI:
             widget.destroy()
     
     def switch_mode(self, mode):
-        """Switch between different modes"""
+        """Switch between different modes.
+        Pushes the current mode onto the nav stack before switching so the
+        Back key can retrace the navigation path.
+        """
+        # Record where we came from (unless this is a Back-navigation or same mode)
+        if not getattr(self, '_nav_back_in_progress', False):
+            prev = getattr(self, 'current_mode', None)
+            if prev and prev != mode:
+                stack = getattr(self, '_nav_stack', [])
+                stack.append(prev)
+                self._nav_stack = stack
         self.current_mode = mode
         self.clear_content_frame()
 
@@ -787,28 +796,19 @@ class DigiCalGUI:
         'q': 'qr_cycle',
         # ── F1 ────────────────────────────────────────────────────
         'F1': 'f1',
-        # ── Home ──────────────────────────────────────────────────
-        'Home': 'home',
-        # ── Shift (CapsLock) ──────────────────────────────────────
-        'Caps_Lock': 'shift',
+        # ── Home (force return to calculator) ─────────────────────
+        'Home': 'home_calculator',
+        # ── Back (CapsLock as keyboard shortcut) ──────────────────
+        'Caps_Lock': 'back',
         # ── Direction keys ────────────────────────────────────────
         'Up':    'dir_up',
         'Down':  'dir_down',
         'Left':  'dir_left',
         'Right': 'dir_right',
         # ── Memory keys ───────────────────────────────────────────
-        'p': 'mem_plus',    # P for Plus-memory  (SHIFT → tax_plus)
-        'n': 'mem_minus',   # N for Neg-memory   (SHIFT → tax_minus)
-        'r': 'mem_recall',  # R for Recall
-    }
-
-    # Keys that have shifted variants (mirrors physical SHIFT_MAP)
-    _LAPTOP_SHIFT_OVERRIDES = {
-        'mem_plus':  'tax_plus',
-        'mem_minus': 'tax_minus',
-        'home': 'home_calculator',
-        # Universal combo: Shift + Menu → safely return to Home Calculator
-        'menu': 'home_calculator',
+        'p': 'mem_plus',
+        'n': 'mem_minus',
+        'r': 'mem_recall',
     }
 
     def _on_global_focus_in(self, event):
@@ -893,24 +893,17 @@ class DigiCalGUI:
         self._on_laptop_key(event)
         return "break"
 
-    def _on_shift_press(self, event):
-        """Track physical Shift key press — activates the one-shot shift latch."""
-        if getattr(self, '_physical_shift_held', False):
-            return  # already held, ignore key-repeat events
-        self._physical_shift_held = True
-        self._laptop_shift_active = True
-        self._dispatch_keypad_action('shift_on')
-
-    def _on_shift_release(self, event):
-        """Track physical Shift key release.
-        The one-shot latch (_laptop_shift_active) stays TRUE so the NEXT key
-        pressed after releasing Shift still gets the shifted action.
-        The latch is consumed (cleared) inside _on_laptop_key when the next
-        action key fires — matching the user's described flow:
-          Shift pressed → Shift released → Menu pressed → Home Calculator.
+    def _on_back_key(self, event):
+        """Physical Shift key released → trigger Back navigation.
+        Skipped if focus is inside a text entry (Shift used for typing).
         """
-        self._physical_shift_held = False
-        # Do NOT clear _laptop_shift_active here — let the next key consume it.
+        try:
+            focused = self.root.focus_get()
+            if focused and focused.winfo_class() in ('Entry', 'Text', 'TEntry'):
+                return  # user is typing capital letters — don't intercept
+        except Exception:
+            pass
+        self._dispatch_keypad_action('back')
 
     def _on_laptop_key(self, event):
         """Global keyboard handler — translates laptop keys into keypad
@@ -919,12 +912,11 @@ class DigiCalGUI:
 
         sym = event.keysym  # e.g. 'a', 'Return', 'KP_5', 'Up'
 
-        # Track physical Shift key separately (press/release)
+        # Shift keys are handled by _on_back_key via KeyRelease binding
         if sym in ('Shift_L', 'Shift_R'):
-            # Handled by dedicated bindings — ignore here
             return
 
-        # Ignore other modifier-only presses
+        # Ignore all other modifier-only presses
         if sym in ('Control_L', 'Control_R', 'Alt_L', 'Alt_R', 'Super_L', 'Super_R'):
             return
 
@@ -936,7 +928,7 @@ class DigiCalGUI:
             # Tkinter throws KeyError('popdown') when a ttk Combobox dropdown is open.
             focused = None
             is_popdown = True
-            
+
         if focused and focused.winfo_class() in ('Entry', 'Text', 'TEntry'):
             # But still allow Enter, Escape, and arrow keys in entries
             if sym not in ('Return', 'KP_Enter', 'Escape',
@@ -950,33 +942,14 @@ class DigiCalGUI:
         action = self._LAPTOP_KEY_MAP.get(sym)
         if not action:
             return
-            
+
         # Re-entrancy guard: if we are already processing a key and decide to
         # event_generate(<Down>) for native handling, ignore that generated event!
         if getattr(self, '_in_laptop_key', False):
             return
-            
+
         self._in_laptop_key = True
         try:
-            # ── Handle SHIFT toggle (CapsLock) ────────────────────────
-            if action == 'shift':
-                self._laptop_shift_active = not self._laptop_shift_active
-                if self._laptop_shift_active:
-                    self._dispatch_keypad_action('shift_on')
-                else:
-                    self._dispatch_keypad_action('shift_off')
-                return
-    
-            # ── Apply shift override if active ────────────────────────
-            if self._laptop_shift_active:
-                shifted = self._LAPTOP_SHIFT_OVERRIDES.get(action)
-                if shifted:
-                    action = shifted
-                # Consume shift (one-shot, same as physical keypad)
-                self._laptop_shift_active = False
-                self._physical_shift_held = False
-                self._dispatch_keypad_action('shift_off')
-    
             self._dispatch_keypad_action(action)
         finally:
             self._in_laptop_key = False
@@ -3610,12 +3583,9 @@ class DigiCalGUI:
     def _dispatch_keypad_action(self, action):
         """Internal dispatcher — runs on the Tk main loop thread."""
 
-        # ── Shift state ─────────────────────────────────────────────
-        if action == "shift_on":
-            self.system_panel.show_shift()
-            return
-        if action == "shift_off":
-            self.system_panel.hide_shift()
+        # ── Back (navigate to previous screen) ──────────────────────
+        if action == "back":
+            self._keypad_back()
             return
 
         # ── Digit keys ──────────────────────────────────────────────
@@ -3963,3 +3933,34 @@ class DigiCalGUI:
 
         if f1_func in valid_modes:
             self.switch_mode(f1_func)
+
+    # ── Back navigation ─────────────────────────────────────────────────
+    def _keypad_back(self):
+        """Smart Back navigation — mirrors a hardware Back button.
+
+        Priority order:
+          1. Close topmost overlay (place-managed frame on root) via Escape.
+          2. Pop the nav stack and return to the previous mode.
+          3. If already at the bottom (Home Calculator), do nothing.
+        """
+        # 1. Close any open overlay first (dialogs, App Launcher, etc.)
+        for child in reversed(self.root.winfo_children()):
+            try:
+                if child.winfo_exists() and child.winfo_manager() == 'place':
+                    # Simulate Escape — each overlay binds its own Escape to close
+                    self.root.event_generate('<Escape>')
+                    return
+            except Exception:
+                pass
+
+        # 2. Walk back through the navigation history
+        stack = getattr(self, '_nav_stack', [])
+        if stack:
+            prev_mode = stack.pop()
+            self._nav_back_in_progress = True
+            try:
+                self.switch_mode(prev_mode)
+            finally:
+                self._nav_back_in_progress = False
+
+        # 3. Stack empty → already at Home Calculator, nothing to do
