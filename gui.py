@@ -2025,80 +2025,64 @@ class DigiCalGUI:
         ov.lift()
         ov.update_idletasks() # Force background draw
 
-        # ── animated GIF ───────────────────────────────────────────────────
+        # ── Success Image ──────────────────────────────────────────────────
+        container = tk.Frame(ov, bg=T["bg"])
+        container.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+
         try:
             from PIL import Image, ImageTk
             import os
             
-            gif_path = os.path.join(os.path.dirname(__file__), "assets", "checkmark.gif")
-            if not os.path.exists(gif_path):
+            png_path = os.path.join(os.path.dirname(__file__), "assets", "tick.png")
+            if not os.path.exists(png_path):
                 raise FileNotFoundError
 
-            # Scale GIF to ~50% of the window's current height, preserve ratio
+            # Scale PNG to ~40% of the window's height
             win_h = self.root.winfo_height() or 480
-            target = int(win_h * 0.50)
+            target_size = int(win_h * 0.40)
 
-            # Cache the frames to prevent 1-2s UI freeze
-            if not hasattr(self, '_success_gif_cache'):
-                self._success_gif_cache = {}
+            raw = Image.open(png_path).convert("RGBA")
+            # Flatten against the background color to avoid transparency issues
+            combined = Image.new("RGB", raw.size, T["bg"]) 
+            combined.paste(raw, (0,0), raw)
+            
+            f_final = combined.resize((target_size, target_size), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(f_final)
+            
+            # Cache the image so it doesn't get garbage collected
+            if not hasattr(self, '_success_png_cache'):
+                self._success_png_cache = []
+            self._success_png_cache.append(photo)
 
-            if target in self._success_gif_cache:
-                frames = self._success_gif_cache[target]
-            else:
-                self._success_gif_cache.clear()
-                raw = Image.open(gif_path)
-                raw_w, raw_h = raw.size
-                scale = target / raw_h if raw_h else 1
-                new_w, new_h = max(1, int(raw_w * scale)), max(1, target)
-                
-                frames = []
-                try:
-                    while True:
-                        # 1. Convert frame to RGBA
-                        f = raw.copy().convert("RGBA")
-                        # 2. Create SOLID background image using the theme's HEX color
-                        # This eliminates transparency issues on Linux/Pi
-                        combined = Image.new("RGB", f.size, T["bg"]) 
-                        combined.paste(f, (0,0), f)
-                        # 3. Resize the flattened OPAQUE result
-                        f_final = combined.resize((new_w, new_h), Image.LANCZOS)
-                        frames.append(ImageTk.PhotoImage(f_final))
-                        
-                        if hasattr(raw, 'seek'):
-                            raw.seek(raw.tell() + 1)
-                        else: break
-                except EOFError:
-                    pass
-                self._success_gif_cache[target] = frames
+            img_label = tk.Label(container, image=photo, bg=T["bg"])
+            img_label.pack(pady=(0, 24))
 
-            gif_label = tk.Label(ov, bg=T["bg"])
-            gif_label.pack(pady=(20, 8))
-
-            def _animate(idx=0):
-                if not ov.winfo_exists():
-                    return
-                gif_label.config(image=frames[idx % len(frames)])
-                ov.after(80, _animate, idx + 1) # Slower for Pi stability
-
-            _animate()
         except Exception as e:
             # Fallback: big unicode tick
-            tk.Label(ov, text="\u2714", font=("Arial", 72), bg=T["bg"],
-                     fg=T["success"]).pack(pady=(60, 8))
+            tk.Label(container, text="\u2714", font=("Arial", 96, "bold"), bg=T["bg"],
+                     fg=T["success"]).pack(pady=(0, 24))
 
-        tk.Label(ov, text=label, font=("Arial", 18, "bold"),
-                 bg=T["bg"], fg=T["success"], wraplength=self.root.winfo_width() - 40).pack(pady=8)
-        tk.Label(ov, text=self.tr("Tap anywhere to continue"),
-                 font=("Arial", 12), bg=T["bg"], fg=T["subtext"]).pack(pady=4)
+        tk.Label(container, text=label, font=("Arial", 32, "bold"),
+                 justify=tk.CENTER, bg=T["bg"], fg=T["success"], 
+                 wraplength=self.root.winfo_width() - 40).pack(pady=(0, 16))
+                 
+        tk.Label(container, text=self.tr("Tap anywhere to continue"),
+                 font=("Arial", 16), bg=T["bg"], fg=T["subtext"]).pack()
 
         def _dismiss(event=None):
             self.root.unbind("<Escape>")
-            ov.destroy()
+            if ov.winfo_exists():
+                ov.destroy()
 
+        # Bind events to overlay, container, and all children
         ov.bind("<Button-1>", _dismiss)
+        container.bind("<Button-1>", _dismiss)
+        for child in container.winfo_children():
+            child.bind("<Button-1>", _dismiss)
+            
         self.root.bind("<Escape>", _dismiss)
-        # Auto-dismiss after 5s
-        ov.after(5000, _dismiss)
+        # Auto-dismiss after 3s
+        ov.after(3000, _dismiss)
 
     def show_transaction_dialog(self, amount):
         """Full-window overlay to categorize a calculation as a transaction."""
@@ -2217,23 +2201,41 @@ class DigiCalGUI:
                          font=("Arial", 12), bg=T["bg"],
                          fg=T["danger"], wraplength=120, justify=tk.CENTER).pack()
 
-        def on_payment_change(event=None):
+        last_valid_pm = [payment_var.get()]
+
+        def on_payment_change(event=None, is_revert=False):
             pm = payment_var.get()
             if pm == self.tr("Due"):
-                due_customer[0] = None
-                self.show_due_customer_dialog(lambda cid: due_customer.__setitem__(0, cid))
+                if not is_revert:
+                    prev_cust = due_customer[0]
+                    due_customer[0] = None
+
+                    def handle_cancel():
+                        payment_var.set(last_valid_pm[0])
+                        due_customer[0] = prev_cust
+                        on_payment_change(is_revert=True)
+
+                    def handle_confirm(cid):
+                        due_customer[0] = cid
+                        last_valid_pm[0] = pm
+
+                    self.show_due_customer_dialog(handle_confirm, handle_cancel)
+
                 _build_method_icon("due.png", "{} as Due")
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky="nsew", padx=10, pady=10)
             elif pm == self.tr("UPI"):
                 due_customer[0] = None
+                last_valid_pm[0] = pm
                 _build_qr()
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky="nsew", padx=10, pady=10)
             elif pm == self.tr("Cash"):
                 due_customer[0] = None
+                last_valid_pm[0] = pm
                 _build_method_icon("cash.png", "{} in Cash")
                 qr_frame.grid(row=0, column=1, rowspan=5, sticky="nsew", padx=10, pady=10)
             else:
                 due_customer[0] = None
+                last_valid_pm[0] = pm
                 qr_frame.grid_remove()
 
         combo.bind("<<ComboboxSelected>>", on_payment_change)
@@ -2458,10 +2460,12 @@ class DigiCalGUI:
         self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
                       width=10, height=2).pack(side=tk.LEFT, padx=5)
 
-    def show_due_customer_dialog(self, on_confirm):
+    def show_due_customer_dialog(self, on_confirm, on_cancel=None):
         """Full-window overlay to link a Due payment to an existing or new customer."""
         T = self.T
         ov, body, close = self._open_overlay(self.tr("Due Payment — Customer"))
+        
+        did_confirm = [False]
 
         tk.Label(body, text=self.tr("Due Payment"), font=("Arial", 13, "bold"),
                  bg=T["bg"], fg=T["text"]).pack(pady=(8, 4))
@@ -2473,10 +2477,10 @@ class DigiCalGUI:
 
         existing_tab_btn = tk.Button(tab_frame, text=self.tr("Existing Customer"),
                                      font=("Arial", 16, "bold"), bg=T["success"], fg="#FFFFFF",
-                                     relief=tk.SUNKEN, bd=2)
+                                     relief=tk.SUNKEN, bd=2, takefocus=0)
         new_tab_btn = tk.Button(tab_frame, text=self.tr("New Customer"),
                                 font=("Arial", 16, "bold"), bg=T["mode_bg"], fg=T["mode_fg"],
-                                relief=tk.RAISED, bd=2)
+                                relief=tk.RAISED, bd=2, takefocus=0)
         existing_tab_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
         new_tab_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
@@ -2585,11 +2589,30 @@ class DigiCalGUI:
             new_panel.pack_forget(); existing_panel.pack(fill=tk.BOTH, expand=True)
             existing_tab_btn.config(bg=T["success"], fg="#FFFFFF", relief=tk.SUNKEN)
             new_tab_btn.config(bg=T["mode_bg"], fg=T["mode_fg"], relief=tk.RAISED); tab_var.set("existing")
+            existing_id_entry.focus_set()
 
         def show_new():
             existing_panel.pack_forget(); new_panel.pack(fill=tk.BOTH, expand=True)
             new_tab_btn.config(bg=T["success"], fg="#FFFFFF", relief=tk.SUNKEN)
             existing_tab_btn.config(bg=T["mode_bg"], fg=T["mode_fg"], relief=tk.RAISED); tab_var.set("new")
+            new_name_entry.focus_set()
+
+        def toggle_tab():
+            if tab_var.get() == "existing":
+                show_new()
+            else:
+                show_existing()
+
+        self._due_customer_toggle = toggle_tab
+        self._due_customer_dialog_open = True
+        
+        def on_destroy(e):
+            if e.widget == ov:
+                self._due_customer_dialog_open = False
+                if not did_confirm[0] and on_cancel:
+                    on_cancel()
+                    
+        ov.bind("<Destroy>", on_destroy, add="+")
 
         existing_tab_btn.config(command=show_existing)
         new_tab_btn.config(command=show_new)
@@ -2599,6 +2622,7 @@ class DigiCalGUI:
             if tab_var.get() == "existing":
                 if not found_customer[0]:
                     self._show_toast(self.tr("Please find a customer first"), kind="error"); return
+                did_confirm[0] = True
                 on_confirm(found_customer[0]); close()
             else:
                 name = new_name_entry.get().strip()
@@ -2610,6 +2634,7 @@ class DigiCalGUI:
                 cid, err = self.db.add_customer(name, phone, email)
                 if cid is None: self._show_toast(err, kind="error"); return
                 self._show_toast(self.tr("Customer created!\nID: {}\nName: {}").format(cid, name))
+                did_confirm[0] = True
                 on_confirm(cid); close()
 
         btn_row = tk.Frame(body, bg=T["bg"])
@@ -3684,6 +3709,25 @@ class DigiCalGUI:
                 focused.invoke() # Toggle the checkbox
                 return
                 
+        # DUE CUSTOMER DIALOG OVERRIDE
+        if getattr(self, '_due_customer_dialog_open', False):
+            if action in ("dir_left", "dir_right"):
+                if hasattr(self, '_due_customer_toggle'):
+                    self._due_customer_toggle()
+                return
+            elif action == "dir_down":
+                nxt = focused.tk_focusNext()
+                if nxt:
+                    nxt.focus_set()
+                    self._ensure_visible(nxt)
+                return
+            elif action == "dir_up":
+                prv = focused.tk_focusPrev()
+                if prv:
+                    prv.focus_set()
+                    self._ensure_visible(prv)
+                return
+
         # By default, use Tab traversal hierarchy for D-Pad
         if action in ("dir_right", "dir_down"):
             nxt = focused.tk_focusNext()
