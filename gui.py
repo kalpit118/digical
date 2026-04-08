@@ -1413,11 +1413,20 @@ class DigiCalGUI:
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
 
+        # Capture the mode that was active when this overlay opened.
+        # When the overlay closes, if current_mode is not "calculator", we must
+        # switch back to calculator so the layout is restored correctly.
+        _mode_on_open = getattr(self, 'current_mode', 'calculator')
+
         def _close():
             ov.destroy()
             # Reset the overlay close tracker if this was the tracked overlay
             if getattr(self, '_active_overlay_close', None) is _close:
                 self._active_overlay_close = None
+            # If this overlay was opened while in a non-calculator mode (e.g. Settings
+            # overlay runs on top of switch_mode("settings")), restore the home screen.
+            if _mode_on_open != 'calculator' and getattr(self, 'current_mode', '') == _mode_on_open:
+                self.switch_mode('calculator')
             # Restore Escape to simply open the App Launcher (default idle behavior)
             self.root.bind("<Escape>", lambda e: self._show_app_launcher())
 
