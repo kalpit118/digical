@@ -572,18 +572,22 @@ class DigiCalGUI:
         self.clear_content_frame()
 
         if mode == "calculator":
+            # CRITICAL: hide content_frame FIRST so it releases its expand=True claim
+            # before outer_display_frame re-takes the full window. Wrong order = tiny display.
+            self.content_frame.pack_forget()
             self.product_bar_frame.pack(fill=tk.X, padx=2, before=self.outer_display_frame)
             # Restore product bar combobox key bindings for home mode
             if hasattr(self, '_product_bar_cb'):
                 self._product_bar_cb.unbind('<Down>')
                 self._product_bar_cb.unbind('<Up>')
-            # Make the display box fill the whole remaining window
+            # Now safely expand outer_display_frame to fill the whole window
             self.outer_display_frame.pack(fill=tk.BOTH, expand=True, padx=6, pady=(4, 0))
             self.display_frame.pack_propagate(True)   # allow expansion
             self.display_frame.config(height=0)
             self.display.config(font=("Consolas", 36, "bold"), anchor=tk.E, pady=10)
             self.live_display.config(font=("Consolas", 24, "bold"), pady=6)
-            self.content_frame.pack_forget()          # hide; receipt is inside display_frame
+            # Force a geometry pass so Tkinter recalculates sizes immediately
+            self.root.update_idletasks()
         else:
             # Block the product bar combobox from opening its dropdown in non-home modes
             if hasattr(self, '_product_bar_cb'):
