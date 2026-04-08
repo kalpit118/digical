@@ -190,8 +190,6 @@ class DigiCalGUI:
 
         # Hide mouse cursor if setting is enabled
         self.hide_cursor: bool = settings.get("hide_cursor", False)
-        if self.hide_cursor:
-            self.root.config(cursor="none")
 
         # Current mode
         self.current_mode = "calculator"
@@ -219,6 +217,9 @@ class DigiCalGUI:
         
         # Enable app to take standard keyboard input
         self.root.bind("<Key>", self._on_keyboard_input)
+        
+        # Apply global cursor settings robustly
+        self._apply_global_cursor()
 
     # ── Settings persistence ─────────────────────────────────────────────
     _SETTINGS_FILE = "settings.json"
@@ -1369,6 +1370,30 @@ class DigiCalGUI:
             canvas = FigureCanvasTkAgg(fig, master=self.graph_frame)
             canvas.draw()
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def _apply_global_cursor(self):
+        """Forcefully hide or restore the mouse cursor across all existing and future widgets."""
+        c = "none" if getattr(self, 'hide_cursor', False) else ""
+        
+        # 1. Update root
+        try: self.root.config(cursor=c)
+        except Exception: pass
+        
+        # 2. Update default Tkinter options for future standard widgets
+        self.root.option_add('*cursor', c)
+        
+        # 3. Update defaults for Ttk widgets
+        style = ttk.Style()
+        for wclass in ('TEntry', 'TCombobox', 'TButton', 'Treeview'):
+            style.configure(wclass, cursor=c)
+            
+        # 4. Recursively update all currently instantiated widgets instantly
+        def walk(w):
+            try: w.config(cursor=c)
+            except Exception: pass
+            for child in w.winfo_children():
+                walk(child)
+        walk(self.root)
     
     # ── Full-window overlay helpers ──────────────────────────────────────────
     def _open_overlay(self, title):
@@ -1386,12 +1411,14 @@ class DigiCalGUI:
 
         def _close():
             ov.destroy()
-            if self.current_mode == "settings":
-                self.switch_mode("calculator")
-            elif self.current_mode == "calculator":
-                self.root.bind("<Escape>", lambda e: self._show_app_launcher())
-            else:
-                self.root.bind("<Escape>", lambda e: self.switch_mode("calculator"))
+            # Reset the overlay close tracker if this was the tracked overlay
+            if getattr(self, '_active_overlay_close', None) is _close:
+                self._active_overlay_close = None
+            # Restore Escape to simply open the App Launcher (default idle behavior)
+            self.root.bind("<Escape>", lambda e: self._show_app_launcher())
+
+        # Track this close function so _keypad_back can call it directly
+        self._active_overlay_close = _close
 
         tk.Button(hdr, text="\u2190 Back",
                   font=(config.LABEL_FONT[0], config.LABEL_FONT[1], "bold"),
@@ -1432,8 +1459,13 @@ class DigiCalGUI:
 
         def _close(event=None):
             self._app_launcher_open = False
+            self._active_overlay_close = None
             ov.destroy()
+            # Restore default Escape binding
             self.root.bind("<Escape>", lambda e: self._show_app_launcher())
+
+        # Track launcher close fn too
+        self._active_overlay_close = _close
 
         tk.Button(hdr, text="\u2715",
                   font=(config.BUTTON_FONT[0], 10, "bold"),
@@ -1714,7 +1746,7 @@ class DigiCalGUI:
             val = cursor_var.get()
             self.hide_cursor = val
             self._save_settings({"hide_cursor": val})
-            self.root.config(cursor="none" if val else "")
+            self._apply_global_cursor()
             flash_saved()
 
         tk.Checkbutton(
@@ -3625,8 +3657,16 @@ class DigiCalGUI:
         if focused is None:
             focused = self.root
 
+        # Check if any overlay is active
+        has_overlay = False
+        for child in self.root.winfo_children():
+            # Overlays use place geometry manager directly on the root
+            if child.winfo_exists() and child.winfo_manager() == 'place':
+                has_overlay = True
+                break
+
         # Calculator mode specific overrides — product bar interactions are HOME ONLY
-        if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False):
+        if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False) and not has_overlay:
             if action in ("dir_down", "dir_up"):
                 if hasattr(self, '_product_bar_cb'):
                     cb = self._product_bar_cb
@@ -3804,28 +3844,43 @@ class DigiCalGUI:
         """Smart Back navigation — mirrors a hardware Back button.
 
         Priority order:
-          1. Close topmost overlay (place-managed frame on root) via Escape.
-             If that overlay was the App Launcher, force transition to Home Calculator.
-          2. If in any App (Sales, History, etc.), open the App Launcher.
+          1. If there is an active overlay, close it directly via its tracked
+             close function (avoids stale Escape re-bind loops). If it was the
+             App Launcher, also switch to Home Calculator.
+          2. If in any App (Sales, History, Settings, etc.), open the App Launcher.
           3. If already at Home Calculator, do nothing.
         """
-        # 1. Close any open overlay first (dialogs, App Launcher, etc.)
+        # 1. Find and close the topmost place-managed overlay directly
+        active_overlay = None
         for child in reversed(self.root.winfo_children()):
             try:
                 if child.winfo_exists() and child.winfo_manager() == 'place':
-                    # Determine if it's the App Launcher by checking its unique flag
-                    was_app_launcher = getattr(self, '_app_launcher_open', False)
-                    # Simulate Escape — each overlay binds its own Escape to close
-                    self.root.event_generate('<Escape>')
-                    # If we just closed the app launcher, explicitly fall back to home calculator
-                    if was_app_launcher:
-                        self.switch_mode("calculator")
-                    return
+                    active_overlay = child
+                    break
             except Exception:
                 pass
 
-        # 2. If we are not in the calculator, we are inside an App. Taking a step back
-        # means opening the App Launcher overlay so they can pick another app or go back again.
+        if active_overlay is not None:
+            was_app_launcher = getattr(self, '_app_launcher_open', False)
+            # Call tracked close fn directly — no Escape event generation
+            close_fn = getattr(self, '_active_overlay_close', None)
+            if close_fn:
+                close_fn()
+            else:
+                # Fallback: destroy directly
+                try:
+                    active_overlay.destroy()
+                except Exception:
+                    pass
+                self._active_overlay_close = None
+            # After closing App Launcher, go to Home Calculator
+            if was_app_launcher:
+                self.switch_mode("calculator")
+            return
+
+        # 2. Inside an App → go to App Launcher
         if getattr(self, 'current_mode', 'calculator') != "calculator":
             self._show_app_launcher()
             return
+
+        # 3. Already at Home Calculator — nothing to do
