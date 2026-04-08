@@ -285,7 +285,7 @@ pip install -r requirements.txt
 
 **Built with ❤️ by Kalpit**
 
-*DigiCal — Smart Business Calculator*
+*DigiCal - Smart Business Calculator*
 
 [![Made with Python](https://img.shields.io/badge/Made%20with-Python-4f8ef7?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Powered by SQLite](https://img.shields.io/badge/Powered%20by-SQLite-43d19e?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
