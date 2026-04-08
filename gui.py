@@ -216,6 +216,9 @@ class DigiCalGUI:
         # Create UI
         self.create_widgets()
         self.switch_mode("calculator")
+        
+        # Enable app to take standard keyboard input
+        self.root.bind("<Key>", self._on_keyboard_input)
 
     # ── Settings persistence ─────────────────────────────────────────────
     _SETTINGS_FILE = "settings.json"
@@ -657,6 +660,40 @@ class DigiCalGUI:
         if not hasattr(self, '_line_products'):
             self._line_products = {}
 
+    def _on_keyboard_input(self, event):
+        """Map standard PC keyboard events globally for text, numbers and enter."""
+        # Allow native behavior for entries and dropdowns
+        try:
+            focused = self.root.focus_get()
+            if focused and focused.winfo_class() in ("Entry", "Text", "TCombobox"):
+                return
+        except KeyError:
+            return
+
+        if self.current_mode == "calculator":
+            char = event.char
+            keysym = event.keysym
+            
+            if keysym in ("Return", "KP_Enter"):
+                self.calculator_button_click("=")
+                return "break"
+                
+            if keysym in ("BackSpace", "Delete"):
+                self.calculator_button_click("CE")
+                return "break"
+                
+            if char in "0123456789.":
+                self.calculator_button_click(char)
+                return "break"
+                
+            op_map = {"*": "×", "x": "×", "X": "×", "/": "÷", "+": "+", "-": "-"}
+            if char in op_map:
+                self.calculator_button_click(op_map[char])
+                return "break"
+                
+            if char == "%":
+                self.calculator_button_click("%")
+                return "break"
 
     def calculator_button_click(self, button):
         """Handle calculator button clicks"""
@@ -3579,11 +3616,17 @@ class DigiCalGUI:
                     cb.focus_set()
                     cb.event_generate('<Down>')  # opens dropdown if closed, or moves down in list
                 return
+            elif action == "dir_up":
+                # Up: navigate up within the product dropdown list
+                if hasattr(self, '_product_bar_cb'):
+                    cb = self._product_bar_cb
+                    cb.focus_set()
+                    cb.event_generate('<Up>')  # moves up in list
+                return
             elif action == "dir_right":
                 # Right: select the currently highlighted item in the product dropdown
                 if hasattr(self, '_product_bar_cb'):
                     cb = self._product_bar_cb
-                    focused_widget = focused
                     # Check if the dropdown popdown listbox is currently open
                     try:
                         pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
@@ -3594,9 +3637,7 @@ class DigiCalGUI:
                         pass
                 return
             elif action == "dir_left":
-                # Left: collapse the product dropdown if open, or release focus from
-                # header bar widgets (Apps button, product combobox, refresh button)
-                # so that the = key doesn't misbehave with SELECT.
+                # Left: collapse the product dropdown if open
                 if hasattr(self, '_product_bar_cb'):
                     cb = self._product_bar_cb
                     # Check if combobox popdown is open and close it
@@ -3604,25 +3645,8 @@ class DigiCalGUI:
                         pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
                         lb = f"{pd}.f.l"
                         self.root.tk.call('event', 'generate', lb, '<Escape>')
-                        # After collapsing, also release focus back to root
-                        self.root.after(10, self.root.focus_set)
-                        return
                     except Exception:
                         pass
-                # If focus is on any widget in the product bar frame or top frame,
-                # release the highlighted cursor so = (equals) acts as calculator =
-                try:
-                    if focused and focused.winfo_exists():
-                        # Walk up the widget hierarchy to check if it's inside the header/product bar
-                        w = focused
-                        while w:
-                            if w in (getattr(self, 'product_bar_frame', None),
-                                     getattr(self, 'top_frame', None)):
-                                self.root.focus_set()  # release focus
-                                return
-                            w = w.master
-                except Exception:
-                    pass
                 self.root.focus_set()  # release focus in all left-key cases on calculator
                 return
 
