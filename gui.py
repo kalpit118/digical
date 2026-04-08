@@ -3805,27 +3805,27 @@ class DigiCalGUI:
 
         Priority order:
           1. Close topmost overlay (place-managed frame on root) via Escape.
-          2. Pop the nav stack and return to the previous mode.
-          3. If already at the bottom (Home Calculator), do nothing.
+             If that overlay was the App Launcher, force transition to Home Calculator.
+          2. If in any App (Sales, History, etc.), open the App Launcher.
+          3. If already at Home Calculator, do nothing.
         """
         # 1. Close any open overlay first (dialogs, App Launcher, etc.)
         for child in reversed(self.root.winfo_children()):
             try:
                 if child.winfo_exists() and child.winfo_manager() == 'place':
+                    # Determine if it's the App Launcher by checking its unique flag
+                    was_app_launcher = getattr(self, '_app_launcher_open', False)
                     # Simulate Escape — each overlay binds its own Escape to close
                     self.root.event_generate('<Escape>')
+                    # If we just closed the app launcher, explicitly fall back to home calculator
+                    if was_app_launcher:
+                        self.switch_mode("calculator")
                     return
             except Exception:
                 pass
 
-        # 2. Walk back through the navigation history
-        stack = getattr(self, '_nav_stack', [])
-        if stack:
-            prev_mode = stack.pop()
-            self._nav_back_in_progress = True
-            try:
-                self.switch_mode(prev_mode)
-            finally:
-                self._nav_back_in_progress = False
-
-        # 3. Stack empty → already at Home Calculator, nothing to do
+        # 2. If we are not in the calculator, we are inside an App. Taking a step back
+        # means opening the App Launcher overlay so they can pick another app or go back again.
+        if getattr(self, 'current_mode', 'calculator') != "calculator":
+            self._show_app_launcher()
+            return
