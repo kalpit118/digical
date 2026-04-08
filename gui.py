@@ -3576,16 +3576,23 @@ class DigiCalGUI:
         except KeyError:
             # A ttk Combobox dropdown is currently open!
             try:
-                cb = getattr(self, '_last_combobox', None)
+                cb = None
+                if getattr(self, 'current_mode', '') == "calculator" and hasattr(self, '_product_bar_cb'):
+                    cb = self._product_bar_cb
+                if not cb:
+                    cb = getattr(self, '_last_combobox', None)
                 if cb:
                     pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
                     lb = f"{pd}.f.l"
                     if action == 'dir_left':
                         self.root.tk.call('event', 'generate', lb, '<Escape>')
-                    elif action in ('dir_right', 'equals'):
+                    elif action == 'equals':
                         self.root.tk.call('event', 'generate', lb, '<Return>')
-                    elif action in ('dir_up', 'dir_down'):
-                        self.root.tk.call('event', 'generate', lb, f'<{keysym}>')
+                    elif action in ('dir_right', 'dir_up', 'dir_down'):
+                        if action == 'dir_right' and getattr(self, 'current_mode', '') == "calculator":
+                            pass
+                        else:
+                            self.root.tk.call('event', 'generate', lb, f'<{keysym}>')
             except Exception:
                 pass
             return
@@ -3595,19 +3602,21 @@ class DigiCalGUI:
 
         # Calculator mode specific overrides — product bar interactions are HOME ONLY
         if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False):
-            if action == "dir_down":
-                # Down: open the product dropdown (or navigate within it if already open)
+            if action in ("dir_down", "dir_up"):
                 if hasattr(self, '_product_bar_cb'):
                     cb = self._product_bar_cb
-                    cb.focus_set()
-                    cb.event_generate('<Down>')  # opens dropdown if closed, or moves down in list
-                return
-            elif action == "dir_up":
-                # Up: navigate up within the product dropdown list
-                if hasattr(self, '_product_bar_cb'):
-                    cb = self._product_bar_cb
-                    cb.focus_set()
-                    cb.event_generate('<Up>')  # moves up in list
+                    cb_open = False
+                    try:
+                        pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
+                        if self.root.tk.call('winfo', 'ismapped', pd):
+                            cb_open = True
+                            lb = f"{pd}.f.l"
+                            self.root.tk.call('event', 'generate', lb, f'<{keysym}>')
+                    except Exception:
+                        pass
+                    if not cb_open:
+                        cb.focus_set()
+                        cb.event_generate(f'<{keysym}>')
                 return
             elif action == "dir_right":
                 return
@@ -3615,11 +3624,11 @@ class DigiCalGUI:
                 # Left: collapse the product dropdown if open
                 if hasattr(self, '_product_bar_cb'):
                     cb = self._product_bar_cb
-                    # Check if combobox popdown is open and close it
                     try:
                         pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
-                        lb = f"{pd}.f.l"
-                        self.root.tk.call('event', 'generate', lb, '<Escape>')
+                        if self.root.tk.call('winfo', 'ismapped', pd):
+                            lb = f"{pd}.f.l"
+                            self.root.tk.call('event', 'generate', lb, '<Escape>')
                     except Exception:
                         pass
                 self.root.focus_set()  # release focus in all left-key cases on calculator
