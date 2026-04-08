@@ -3686,9 +3686,55 @@ class DigiCalGUI:
                 
         # By default, use Tab traversal hierarchy for D-Pad
         if action in ("dir_right", "dir_down"):
-            focused.tk_focusNext().focus_set()
+            nxt = focused.tk_focusNext()
+            if nxt:
+                nxt.focus_set()
+                self._ensure_visible(nxt)
         elif action in ("dir_left", "dir_up"):
-            focused.tk_focusPrev().focus_set()
+            prv = focused.tk_focusPrev()
+            if prv:
+                prv.focus_set()
+                self._ensure_visible(prv)
+
+    def _ensure_visible(self, widget):
+        """Scrolls the parent canvas to ensure the widget is visible on screen."""
+        if not widget.winfo_ismapped():
+            return
+            
+        parent = widget.master
+        canvas = None
+        while parent:
+            if parent.winfo_class() == 'Canvas':
+                canvas = parent
+                break
+            parent = parent.master
+            
+        if canvas:
+            canvas.update_idletasks() # Ensure geometry bounds are up to date
+            canvas_h = canvas.winfo_height()
+            
+            bbox = canvas.bbox("all")
+            if not bbox:
+                return
+                
+            content_h = bbox[3] - bbox[1]
+            if content_h <= canvas_h:
+                return
+                
+            w_top = widget.winfo_rooty()
+            w_bottom = w_top + widget.winfo_height()
+            c_top = canvas.winfo_rooty()
+            c_bottom = c_top + canvas_h
+            
+            y_view = canvas.yview()
+            if w_top < c_top:
+                delta = c_top - w_top
+                fraction_change = delta / content_h
+                canvas.yview_moveto(max(0.0, y_view[0] - fraction_change - 0.05))
+            elif w_bottom > c_bottom:
+                delta = w_bottom - c_bottom
+                fraction_change = delta / content_h
+                canvas.yview_moveto(min(1.0, y_view[0] + fraction_change + 0.05))
 
     # ── F1 programmable key ─────────────────────────────────────────────
     def _keypad_f1_action(self):
