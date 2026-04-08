@@ -2125,7 +2125,7 @@ class DigiCalGUI:
         # ── Two-column grid ─────────────────────────────────────
         # col 0 = info / controls   col 1 = QR (right side)
         body.columnconfigure(0, weight=1)
-        body.columnconfigure(1, weight=0)
+        body.columnconfigure(1, weight=1)
         # row weights: spacer row 4 absorbs remaining height
         body.rowconfigure(4, weight=1)
 
@@ -2181,17 +2181,14 @@ class DigiCalGUI:
                                    box_size=4, border=2)
                 qr.add_data(uri)
                 qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white").resize((320, 320))
+                img = qr.make_image(fill_color="black", back_color="white").resize((340, 340))
                 photo = ImageTk.PhotoImage(img)
                 _qr_ref[0] = photo
                 tk.Label(qr_frame, image=photo, bg="white",
-                         relief=tk.FLAT, bd=3).pack(pady=(8, 4))
-                tk.Label(qr_frame, text=self.tr("{} via UPI").format(f"₹{amount_val:.2f}"),
-                         font=("Arial", 18, "bold"), bg=T["bg"],
-                         fg=T["success"]).pack()
+                         relief=tk.FLAT, bd=3).pack(pady=(20, 10))
                 tk.Label(qr_frame, text=vpa,
-                         font=("Arial", 16), bg=T["bg"],
-                         fg=T["subtext"]).pack()
+                         font=("Arial", 22, "bold"), bg=T["bg"],
+                         fg=T["success"]).pack()
             except Exception as ex:
                 tk.Label(qr_frame, text=self.tr("QR error:\n{}").format(ex),
                          font=("Arial", 12), bg=T["bg"],
@@ -2204,9 +2201,9 @@ class DigiCalGUI:
                 img_path = os.path.join(os.path.dirname(__file__), "assets", asset_name)
                 raw = Image.open(img_path)
                 
-                # Resize proportionally to fit a similar 320x320 box as the QR code
+                # Resize proportionally to fit a similar 340x340 box as the QR code
                 raw_w, raw_h = raw.size
-                scale = min(320 / raw_w, 320 / raw_h) if raw_w and raw_h else 1
+                scale = min(340 / raw_w, 340 / raw_h) if raw_w and raw_h else 1
                 new_size = (max(1, int(raw_w * scale)), max(1, int(raw_h * scale)))
                 
                 img = raw.resize(new_size, Image.LANCZOS)
@@ -2214,10 +2211,7 @@ class DigiCalGUI:
                 _qr_ref[0] = photo
                 
                 tk.Label(qr_frame, image=photo, bg=T["bg"],
-                         relief=tk.FLAT).pack(pady=(8, 4))
-                tk.Label(qr_frame, text=self.tr(label_text).format(f"₹{amount_val:.2f}"),
-                         font=("Arial", 18, "bold"), bg=T["bg"],
-                         fg=T["success"]).pack()
+                         relief=tk.FLAT).pack(pady=(20, 10))
             except Exception as ex:
                 tk.Label(qr_frame, text=self.tr("Image error:\n{}").format(ex),
                          font=("Arial", 12), bg=T["bg"],
@@ -2229,15 +2223,15 @@ class DigiCalGUI:
                 due_customer[0] = None
                 self.show_due_customer_dialog(lambda cid: due_customer.__setitem__(0, cid))
                 _build_method_icon("due.png", "{} as Due")
-                qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
+                qr_frame.grid(row=0, column=1, rowspan=5, sticky="nsew", padx=10, pady=10)
             elif pm == self.tr("UPI"):
                 due_customer[0] = None
                 _build_qr()
-                qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
+                qr_frame.grid(row=0, column=1, rowspan=5, sticky="nsew", padx=10, pady=10)
             elif pm == self.tr("Cash"):
                 due_customer[0] = None
                 _build_method_icon("cash.png", "{} in Cash")
-                qr_frame.grid(row=0, column=1, rowspan=5, sticky=tk.NE, padx=(4, 10), pady=6)
+                qr_frame.grid(row=0, column=1, rowspan=5, sticky="nsew", padx=10, pady=10)
             else:
                 due_customer[0] = None
                 qr_frame.grid_remove()
@@ -2316,10 +2310,8 @@ class DigiCalGUI:
         # Buttons  (left col)
         bf = tk.Frame(body, bg=T["bg"])
         bf.grid(row=3, column=0, sticky=tk.W, padx=6, pady=24)
-        self._neu_btn(bf, self.tr("Sale"), command=save_as_sale, kind="equals", width=14, height=3).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, self.tr("Expense"), command=save_as_expense, kind="danger", width=14, height=3).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, "✕", command=close, kind="mode", width=6, height=3).pack(side=tk.LEFT, padx=5)
-
+        self._neu_btn(bf, self.tr("Sale"), command=save_as_sale, kind="equals", width=18, height=2).grid(row=0, column=0, pady=5, sticky="ew")
+        self._neu_btn(bf, self.tr("Expense"), command=save_as_expense, kind="danger", width=18, height=2).grid(row=1, column=0, pady=5, sticky="ew")
 
     
     def update_handler_status(self):
@@ -3412,13 +3404,7 @@ class DigiCalGUI:
 
         # ── Equals (Enter) ──────────────────────────────────────────
         if action == "equals":
-            if getattr(self, '_app_launcher_open', False):
-                self._keypad_navigate(action)
-                return
-            if self.current_mode == "calculator" and not self._transaction_dialog_open:
-                self.calculator_button_click("=")
-            else:
-                self._keypad_navigate(action)
+            self._keypad_navigate(action)
             return
 
         # ── Clear / Backspace ───────────────────────────────────────
@@ -3624,17 +3610,6 @@ class DigiCalGUI:
                     cb.event_generate('<Up>')  # moves up in list
                 return
             elif action == "dir_right":
-                # Right: select the currently highlighted item in the product dropdown
-                if hasattr(self, '_product_bar_cb'):
-                    cb = self._product_bar_cb
-                    # Check if the dropdown popdown listbox is currently open
-                    try:
-                        pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
-                        lb = f"{pd}.f.l"
-                        # Simulate Return on the listbox to confirm selection
-                        self.root.tk.call('event', 'generate', lb, '<Return>')
-                    except Exception:
-                        pass
                 return
             elif action == "dir_left":
                 # Left: collapse the product dropdown if open
@@ -3648,6 +3623,23 @@ class DigiCalGUI:
                     except Exception:
                         pass
                 self.root.focus_set()  # release focus in all left-key cases on calculator
+                return
+            elif action == "equals":
+                cb_open = False
+                if hasattr(self, '_product_bar_cb'):
+                    cb = self._product_bar_cb
+                    try:
+                        pd = self.root.tk.call('ttk::combobox::PopdownWindow', cb)
+                        # Ensure the listbox is actively mapped on screen
+                        if self.root.tk.call('winfo', 'ismapped', pd):
+                            cb_open = True
+                            lb = f"{pd}.f.l"
+                            self.root.tk.call('event', 'generate', lb, '<Return>')
+                    except Exception:
+                        pass
+                
+                if not cb_open:
+                    self.calculator_button_click("=")
                 return
 
         # If equals, inject Return / Activate
