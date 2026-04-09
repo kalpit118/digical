@@ -2532,6 +2532,7 @@ class DigiCalGUI:
         existing_id_var = tk.StringVar()
         existing_id_entry = tk.Entry(existing_panel, textvariable=existing_id_var, font=("Arial", 22), width=24,
                                      bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
+        existing_id_entry.t9_mode = "num"
         existing_id_entry.grid(row=0, column=1, pady=12, padx=16, sticky=tk.EW)
         
         tk.Label(existing_panel, text=self.tr("  OR  "), font=("Arial", 16, "bold"),
@@ -2542,6 +2543,7 @@ class DigiCalGUI:
         existing_phone_var = tk.StringVar()
         existing_phone_entry = tk.Entry(existing_panel, textvariable=existing_phone_var, font=("Arial", 22), width=24,
                                         bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
+        existing_phone_entry.t9_mode = "num"
         existing_phone_entry.grid(row=2, column=1, pady=12, padx=16, sticky=tk.EW)
         
         found_label = tk.Label(existing_panel, text="", font=("Arial", 14, "bold"),
@@ -2604,6 +2606,7 @@ class DigiCalGUI:
                  bg=T["bg"], fg=T["text"]).grid(row=1, column=0, sticky=tk.W, pady=12)
         new_name_entry = tk.Entry(new_panel, font=("Arial", 22), width=24,
                                   bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
+        new_name_entry.t9_mode = "alpha"
         new_name_entry.grid(row=1, column=1, pady=12, padx=16, sticky=tk.EW)
         
         tk.Label(new_panel, text=self.tr("Phone *:"), font=("Arial", 16),
@@ -2613,12 +2616,14 @@ class DigiCalGUI:
         new_phone_entry = tk.Entry(new_panel, textvariable=phone_var, font=("Arial", 22),
                                    width=24, validate="key", validatecommand=vcmd,
                                    bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
+        new_phone_entry.t9_mode = "num"
         new_phone_entry.grid(row=2, column=1, pady=12, padx=16, sticky=tk.EW)
         
         tk.Label(new_panel, text=self.tr("Email:"), font=("Arial", 16),
                  bg=T["bg"], fg=T["text"]).grid(row=3, column=0, sticky=tk.W, pady=12)
         new_email_entry = tk.Entry(new_panel, font=("Arial", 22), width=24,
                                    bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"])
+        new_email_entry.t9_mode = "alphanum"
         new_email_entry.grid(row=3, column=1, pady=12, padx=16, sticky=tk.EW)
         
         new_panel.columnconfigure(1, weight=1)
@@ -3430,23 +3435,48 @@ class DigiCalGUI:
             self._keypad_back()
             return
 
+        # First, gather focus context to make actions context-aware
+        focused = None
+        try:
+            focused = self.root.focus_get()
+        except BaseException:
+            pass
+            
+        wtype = focused.winfo_class() if focused else ""
+
+        # ── Clear / Backspace ───────────────────────────────────────
+        if action == "all_clear":
+            if wtype in ("Entry", "TCombobox"):
+                focused.delete(0, tk.END)
+            elif wtype == "Text":
+                focused.delete("1.0", tk.END)
+            elif self.current_mode == "calculator":
+                self.calculator_button_click("C")
+            return
+            
+        if action == "clear_last":
+            if wtype in ("Entry", "TCombobox"):
+                pos = focused.index(tk.INSERT)
+                if pos > 0:
+                    focused.delete(pos - 1, pos)
+            elif wtype == "Text":
+                focused.delete("insert-1c", tk.INSERT)
+            elif self.current_mode == "calculator":
+                self.calculator_button_click("CE")
+            return
+
         # ── Digit keys & T9 Multi-tap Input ─────────────────────────
         if action.startswith("digit_"):
             d = action[6:]  # "digit_9" → "9", "digit_00" → "00"
             
-            focused = None
-            try:
-                focused = self.root.focus_get()
-            except BaseException:
-                pass
-                
-            wtype = focused.winfo_class() if focused else ""
             if wtype in ("Entry", "Text", "TCombobox"):
                 import time
                 now = time.time()
                 
+                t9_mode = getattr(focused, "t9_mode", "alphanum")
+                
                 t9_map = {
-                    "1": ["1"],
+                    "1": ["1", "@"],
                     "2": ["a", "b", "c", "2"],
                     "3": ["d", "e", "f", "3"],
                     "4": ["g", "h", "i", "4"],
@@ -3459,10 +3489,29 @@ class DigiCalGUI:
                     "00": ["00"]
                 }
                 
+                if t9_mode == "num":
+                    # Strictly numbers, no cycling
+                    t9_map = {k: [k] for k in t9_map}
+                elif t9_mode == "alpha":
+                    # Remove numbers from the cycles
+                    t9_map = {
+                        "1": ["@"],
+                        "2": ["a", "b", "c"],
+                        "3": ["d", "e", "f"],
+                        "4": ["g", "h", "i"],
+                        "5": ["j", "k", "l"],
+                        "6": ["m", "n", "o"],
+                        "7": ["p", "q", "r", "s"],
+                        "8": ["t", "u", "v"],
+                        "9": ["w", "x", "y", "z"],
+                        "0": [" "],
+                        "00": [" "]
+                    }
+                
                 chars = t9_map.get(d, [d])
                 
                 # Check for fast multi-tap or hold auto-repeat (< 1.2s delay)
-                if self._t9_last_key == d and (now - self._t9_last_time) < 1.2:
+                if self._t9_last_key == d and (now - self._t9_last_time) < 1.2 and len(chars) > 1:
                     self._t9_index = (self._t9_index + 1) % len(chars)
                     # Erase the last character we just inserted
                     if wtype in ("Entry", "TCombobox"):
@@ -3520,16 +3569,6 @@ class DigiCalGUI:
         # ── Equals (Enter) ──────────────────────────────────────────
         if action == "equals":
             self._keypad_navigate(action)
-            return
-
-        # ── Clear / Backspace ───────────────────────────────────────
-        if action == "all_clear":
-            if self.current_mode == "calculator":
-                self.calculator_button_click("C")
-            return
-        if action == "clear_last":
-            if self.current_mode == "calculator":
-                self.calculator_button_click("CE")
             return
 
         # ── Memory operations ───────────────────────────────────────
