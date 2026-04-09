@@ -254,6 +254,7 @@ class DigiCalGUI:
     # ── Theme helpers ──────────────────────────────────────────────────────────
     def _apply_ttk_styles(self):
         """Configure ttk widget styles for the active neumorphic palette."""
+        self.root.option_add("*highlightColor", "red")
         T = self.T
         style = ttk.Style()
         try:
@@ -376,7 +377,7 @@ class DigiCalGUI:
             relief=tk.FLAT, bd=0, cursor="hand2",
             highlightthickness=1,
             highlightbackground=T["shadow_dark"],
-            highlightcolor=T["shadow_lite"],
+            highlightcolor="red",
             **kw
         )
 
@@ -1984,23 +1985,8 @@ class DigiCalGUI:
             else:
                 self._show_toast(self.tr("Update failed."), kind="error")
 
-        def _revert_up():
-            if not os.path.exists(updater.backup_dir):
-                self._show_toast(self.tr("No backup found to revert."), kind="warning")
-                return
-            self._show_confirm(self.tr("Revert to last backup? (Auto-restarts)"), lambda: _do_revert())
-
-        def _do_revert():
-            if updater.revert_update():
-                updater.restart_app()
-            else:
-                self._show_toast(self.tr("Revert failed."), kind="error")
-
         check_btn = self._neu_btn(up_frame, "", textvariable=up_btn_var, command=_check_up, kind="equals")
         check_btn.pack(side=tk.LEFT, padx=3, pady=5)
-        
-        revert_btn = self._neu_btn(up_frame, self.tr("Revert Update"), command=_revert_up, kind="mode")
-        revert_btn.pack(side=tk.LEFT, padx=3, pady=5)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 6) KEYPAD
@@ -2059,6 +2045,9 @@ class DigiCalGUI:
         tk.Frame(scroll_frame, bg=T["bg"], height=6).pack()
         self._neu_btn(scroll_frame, self.tr("Close"), command=close,
                      kind="mode", width=10, height=2).pack(pady=(0, 10))
+
+        # Start cursor on Language Option
+        self.root.after(100, lambda: [lang_combo.focus_set(), self._ensure_visible(lang_combo)])
 
 
 
