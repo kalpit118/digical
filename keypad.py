@@ -86,13 +86,13 @@ KEY_MAP = {
     "R1C6": "mem_recall",
     "R1C7": "back",         # Back / History navigation
 
-    # Row 2: Graph, %, ÷, 9, 8, 7, MENU
+    # Row 2: Graph, %, ÷, 3, 2, 1, MENU
     "R2C1": "graph",
     "R2C2": "percent",
     "R2C3": "op_div",
-    "R2C4": "digit_9",
-    "R2C5": "digit_8",
-    "R2C6": "digit_7",
+    "R2C4": "digit_3",
+    "R2C5": "digit_2",
+    "R2C6": "digit_1",
     "R2C7": "menu",
 
     # Row 3: QR (payment cycle), −, ×, 6, 5, 4, AC
@@ -104,13 +104,13 @@ KEY_MAP = {
     "R3C6": "digit_4",
     "R3C7": "all_clear",
 
-    # Row 4: F1, SALES, +, 3, 2, 1, C (backspace)
+    # Row 4: F1, SALES, +, 9, 8, 7, C (backspace)
     "R4C1": "f1",
     "R4C2": "sales",
     "R4C3": "op_plus",
-    "R4C4": "digit_3",
-    "R4C5": "digit_2",
-    "R4C6": "digit_1",
+    "R4C4": "digit_9",
+    "R4C5": "digit_8",
+    "R4C6": "digit_7",
     "R4C7": "clear_last",
 
     # Row 5: Up, DUE, EXPENSE, =, ., 00, 0
