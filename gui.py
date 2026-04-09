@@ -1117,6 +1117,10 @@ class DigiCalGUI:
         # Show default graph
         self.show_weekly_graph()
 
+        # Set initial focus to the first button
+        if scrollable_frame.winfo_children():
+            scrollable_frame.winfo_children()[0].focus_set()
+
 
     def clear_graph_frame(self):
         """Clear graph display"""
@@ -3892,30 +3896,48 @@ class DigiCalGUI:
             
         if canvas:
             canvas.update_idletasks() # Ensure geometry bounds are up to date
-            canvas_h = canvas.winfo_height()
             
             bbox = canvas.bbox("all")
             if not bbox:
                 return
                 
+            # Vertical scrolling
+            canvas_h = canvas.winfo_height()
             content_h = bbox[3] - bbox[1]
-            if content_h <= canvas_h:
-                return
+            if content_h > canvas_h:
+                w_top = widget.winfo_rooty()
+                w_bottom = w_top + widget.winfo_height()
+                c_top = canvas.winfo_rooty()
+                c_bottom = c_top + canvas_h
                 
-            w_top = widget.winfo_rooty()
-            w_bottom = w_top + widget.winfo_height()
-            c_top = canvas.winfo_rooty()
-            c_bottom = c_top + canvas_h
-            
-            y_view = canvas.yview()
-            if w_top < c_top:
-                delta = c_top - w_top
-                fraction_change = delta / content_h
-                canvas.yview_moveto(max(0.0, y_view[0] - fraction_change - 0.05))
-            elif w_bottom > c_bottom:
-                delta = w_bottom - c_bottom
-                fraction_change = delta / content_h
-                canvas.yview_moveto(min(1.0, y_view[0] + fraction_change + 0.05))
+                y_view = canvas.yview()
+                if w_top < c_top:
+                    delta = c_top - w_top
+                    fraction_change = delta / content_h
+                    canvas.yview_moveto(max(0.0, y_view[0] - fraction_change - 0.05))
+                elif w_bottom > c_bottom:
+                    delta = w_bottom - c_bottom
+                    fraction_change = delta / content_h
+                    canvas.yview_moveto(min(1.0, y_view[0] + fraction_change + 0.05))
+
+            # Horizontal scrolling
+            canvas_w = canvas.winfo_width()
+            content_w = bbox[2] - bbox[0]
+            if content_w > canvas_w:
+                w_left = widget.winfo_rootx()
+                w_right = w_left + widget.winfo_width()
+                c_left = canvas.winfo_rootx()
+                c_right = c_left + canvas_w
+                
+                x_view = canvas.xview()
+                if w_left < c_left:
+                    delta = c_left - w_left
+                    fraction_change = delta / content_w
+                    canvas.xview_moveto(max(0.0, x_view[0] - fraction_change - 0.05))
+                elif w_right > c_right:
+                    delta = w_right - c_right
+                    fraction_change = delta / content_w
+                    canvas.xview_moveto(min(1.0, x_view[0] + fraction_change + 0.05))
 
     # ── F1 programmable key ─────────────────────────────────────────────
     def _keypad_f1_action(self):
