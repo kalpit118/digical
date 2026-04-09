@@ -206,6 +206,10 @@ class DigiCalGUI:
         self._active_dialog_close_fn = None   # close callable
         self._transaction_dialog_open = False # True while dialog is visible
 
+        self._t9_last_key = None
+        self._t9_last_time = 0.0
+        self._t9_index = 0
+
         # ── Navigation history (Back key) ─────────────────────────────────
         # Tracks the sequence of modes visited so the Back key can reverse them.
         self._nav_stack = []          # list of mode strings e.g. ['calculator', 'sales']
@@ -3437,9 +3441,61 @@ class DigiCalGUI:
             self._keypad_back()
             return
 
-        # ── Digit keys ──────────────────────────────────────────────
+        # ── Digit keys & T9 Multi-tap Input ─────────────────────────
         if action.startswith("digit_"):
             d = action[6:]  # "digit_9" → "9", "digit_00" → "00"
+            
+            focused = None
+            try:
+                focused = self.root.focus_get()
+            except BaseException:
+                pass
+                
+            wtype = focused.winfo_class() if focused else ""
+            if wtype in ("Entry", "Text", "TCombobox"):
+                import time
+                now = time.time()
+                
+                t9_map = {
+                    "1": ["1"],
+                    "2": ["a", "b", "c", "2"],
+                    "3": ["d", "e", "f", "3"],
+                    "4": ["g", "h", "i", "4"],
+                    "5": ["j", "k", "l", "5"],
+                    "6": ["m", "n", "o", "6"],
+                    "7": ["p", "q", "r", "s", "7"],
+                    "8": ["t", "u", "v", "8"],
+                    "9": ["w", "x", "y", "z", "9"],
+                    "0": [" ", "0"],
+                    "00": ["00"]
+                }
+                
+                chars = t9_map.get(d, [d])
+                
+                # Check for fast multi-tap or hold auto-repeat (< 1.2s delay)
+                if self._t9_last_key == d and (now - self._t9_last_time) < 1.2:
+                    self._t9_index = (self._t9_index + 1) % len(chars)
+                    # Erase the last character we just inserted
+                    if wtype in ("Entry", "TCombobox"):
+                        pos = focused.index(tk.INSERT)
+                        if pos > 0:
+                            focused.delete(pos - 1, pos)
+                    elif wtype == "Text":
+                        focused.delete("insert-1c", tk.INSERT)
+                else:
+                    self._t9_index = 0
+                    
+                self._t9_last_key = d
+                self._t9_last_time = now
+                
+                char_to_insert = chars[self._t9_index]
+                
+                if wtype in ("Entry", "TCombobox"):
+                    focused.insert(tk.INSERT, char_to_insert)
+                elif wtype == "Text":
+                    focused.insert(tk.INSERT, char_to_insert)
+                return
+
             if self.current_mode == "calculator":
                 if d == "00":
                     self.calculator_button_click("0")
