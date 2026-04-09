@@ -1119,7 +1119,7 @@ class DigiCalGUI:
 
         # Set initial focus to the first button
         if scrollable_frame.winfo_children():
-            scrollable_frame.winfo_children()[0].focus_set()
+            self.root.after(100, lambda: scrollable_frame.winfo_children()[0].focus_set())
 
 
     def clear_graph_frame(self):
