@@ -3137,8 +3137,8 @@ class DigiCalGUI:
         ctrl = tk.Frame(self.content_frame, bg=T["bg"])
         ctrl.pack(fill=tk.X, pady=(2, 0))
 
-        add_btn = self._neu_btn(ctrl, self.tr("+ Add"), command=lambda: self._product_create_dialog(_load_products), kind="equals")
-        add_btn.pack(side=tk.LEFT, padx=3)
+        self._neu_btn(ctrl, self.tr("+ Add"), command=self._product_create_dialog,
+                     kind="equals").pack(side=tk.LEFT, padx=3)
 
         edit_btn = self._neu_btn(ctrl, "\u270e " + self.tr("Modify"), kind="mode")
         edit_btn.pack(side=tk.LEFT, padx=3)
@@ -3146,8 +3146,9 @@ class DigiCalGUI:
         del_btn = self._neu_btn(ctrl, "\u2715 " + self.tr("Delete"), kind="danger")
         del_btn.pack(side=tk.LEFT, padx=3)
 
-        ref_btn = self._neu_btn(ctrl, "\u21ba " + self.tr("Refresh"), command=_load_products, kind="normal")
-        ref_btn.pack(side=tk.RIGHT, padx=3)
+        self._neu_btn(ctrl, "\u21ba " + self.tr("Refresh"),
+                     command=lambda: (self.clear_content_frame(), self.show_products_mode()),
+                     kind="normal").pack(side=tk.RIGHT, padx=3)
 
         # ── treeview ─────────────────────────────────────────────────────────
         tree_frame = tk.Frame(self.content_frame, bg=T["bg"])
@@ -3211,11 +3212,8 @@ class DigiCalGUI:
         del_btn.config(command=lambda: self._product_delete(_get_selected(), _load_products))
         
         # double-click also opens modify
-        tree.bind("<Double-1>", lambda e: self._product_modify_dialog(_get_selected(), _load_products))
-        
-        # Track for keypad navigation
-        self._products_btn_widgets = [add_btn, edit_btn, del_btn, ref_btn]
-        self._products_tree = tree
+        tree.bind("<Double-1>",
+                  lambda e: self._product_modify_dialog(_get_selected(), _load_products))
     
     # ---- shared form helper ------------------------------------------------
     def _product_form(self, parent, prefill=None):
@@ -3302,7 +3300,7 @@ class DigiCalGUI:
         return name, cat, tqty, lqty, price
     
     # ---- Create dialog -----------------------------------------------------
-    def _product_create_dialog(self, reload_cb=None):
+    def _product_create_dialog(self):
         T = self.T
         ov, body, close = self._open_overlay(self.tr("Add New Product"))
         tk.Label(body, text=self.tr("Add New Product"),
@@ -3319,7 +3317,8 @@ class DigiCalGUI:
             pid = self.db.add_product(name, cat, tqty, price, lqty)
             self._show_toast(f"Product '{name}' added (ID {pid})")
             close()
-            if reload_cb: reload_cb()
+            self.clear_content_frame()
+            self.show_products_mode()
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
@@ -3361,7 +3360,8 @@ class DigiCalGUI:
             self.db.update_product(pid, n, c, tq, lq, pr)
             self._show_toast(f"Product #{pid} updated")
             close()
-            if reload_cb: reload_cb()
+            self.clear_content_frame()
+            self.show_products_mode()
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
@@ -3385,7 +3385,8 @@ class DigiCalGUI:
         name = row_values[1]
         def _do_delete():
             self.db.delete_product(pid)
-            if reload_cb: reload_cb()
+            self.clear_content_frame()
+            self.show_products_mode()
         self._show_confirm(self.tr("Delete '{}' (ID {})?").format(name, pid), _do_delete)
 
     # ── Handlers Management ────────────────────────────────────────────
@@ -4162,45 +4163,6 @@ class DigiCalGUI:
                 return
 
         # CUSTOMERS MODE OVERRIDE (only when no dialog is open)
-        # ── PRODUCTS MODE OVERRIDE ──────────────────────────────────────────
-        if getattr(self, 'current_mode', '') == "products" and hasattr(self, '_products_tree') \
-                and not getattr(self, '_product_dialog_open', False):
-
-            tree = self._products_tree
-            btns = getattr(self, '_products_btn_widgets', [])
-            
-            focused_idx = -1
-            if focused in btns:
-                focused_idx = btns.index(focused)
-                
-            on_tree = (focused == tree)
-            on_btn = (focused_idx != -1)
-
-            if action in ("dir_up", "dir_down"):
-                if not on_tree:
-                    tree.focus_set()
-                else:
-                    tree.event_generate(f"<{keysym}>")
-                return
-
-            if action in ("dir_left", "dir_right"):
-                if on_tree and btns:
-                    btns[0].focus_set()
-                elif on_btn:
-                    if action == "dir_right":
-                        nxt = focused_idx + 1
-                        if nxt < len(btns):
-                            btns[nxt].focus_set()
-                        else:
-                            tree.focus_set()
-                    elif action == "dir_left":
-                        prv = focused_idx - 1
-                        if prv >= 0:
-                            btns[prv].focus_set()
-                        else:
-                            tree.focus_set()
-                return
-
         if getattr(self, 'current_mode', '') == "customers" and hasattr(self, '_customers_tree') \
                 and not getattr(self, '_due_customer_dialog_open', False) \
                 and not getattr(self, '_settle_due_open', False):
