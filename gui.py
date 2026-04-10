@@ -3773,6 +3773,17 @@ class DigiCalGUI:
                 has_overlay = True
                 break
 
+        # Top-level fallback for Graphs mode (e.g. initial focus is on Apps button)
+        is_top_level = (focused == self.root or focused.master == getattr(self, 'top_frame', None))
+        if is_top_level and not has_overlay:
+            if getattr(self, 'current_mode', '') == "graphs" and hasattr(self, '_graphs_scrollable_frame'):
+                if action in ("dir_right", "dir_down"):
+                    children = self._graphs_scrollable_frame.winfo_children()
+                    if children:
+                        children[0].focus_set()
+                        self._ensure_visible(children[0])
+                        return
+                        
         # Calculator mode specific overrides — product bar interactions are HOME ONLY
         if self.current_mode == "calculator" and not getattr(self, '_transaction_dialog_open', False) and not has_overlay:
             if action in ("dir_down", "dir_up"):
