@@ -3888,6 +3888,24 @@ class DigiCalGUI:
                     except ValueError:
                         pass
 
+        def _get_interactive_focus(start, forward=True):
+            curr = start
+            for _ in range(50):
+                curr = curr.tk_focusNext() if forward else curr.tk_focusPrev()
+                if not curr or curr == start or curr == self.root:
+                    return None
+                wclass = curr.winfo_class()
+                if wclass in ("Frame", "TFrame", "Label", "TLabel", "Canvas", "Scrollbar", "TScrollbar"):
+                    continue
+                try:
+                    if curr.winfo_ismapped() and str(curr.cget("state")) != "disabled":
+                        return curr
+                except Exception:
+                    # Some widgets don't have a state option, just return them if mapped
+                    if curr.winfo_ismapped():
+                        return curr
+            return None
+
         # DUE CUSTOMER DIALOG OVERRIDE
         if getattr(self, '_due_customer_dialog_open', False):
             if action in ("dir_left", "dir_right"):
@@ -3895,13 +3913,13 @@ class DigiCalGUI:
                     self._due_customer_toggle()
                 return
             elif action == "dir_down":
-                nxt = focused.tk_focusNext()
+                nxt = _get_interactive_focus(focused, True) or focused.tk_focusNext()
                 if nxt:
                     nxt.focus_set()
                     self._ensure_visible(nxt)
                 return
             elif action == "dir_up":
-                prv = focused.tk_focusPrev()
+                prv = _get_interactive_focus(focused, False) or focused.tk_focusPrev()
                 if prv:
                     prv.focus_set()
                     self._ensure_visible(prv)
@@ -3909,12 +3927,12 @@ class DigiCalGUI:
 
         # By default, use Tab traversal hierarchy for D-Pad
         if action in ("dir_right", "dir_down"):
-            nxt = focused.tk_focusNext()
+            nxt = _get_interactive_focus(focused, True) or focused.tk_focusNext()
             if nxt:
                 nxt.focus_set()
                 self._ensure_visible(nxt)
         elif action in ("dir_left", "dir_up"):
-            prv = focused.tk_focusPrev()
+            prv = _get_interactive_focus(focused, False) or focused.tk_focusPrev()
             if prv:
                 prv.focus_set()
                 self._ensure_visible(prv)
