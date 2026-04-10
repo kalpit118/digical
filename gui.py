@@ -998,12 +998,12 @@ class DigiCalGUI:
         calc_cols = (self.tr("Date"), self.tr("Calculation"), self.tr("Result"))
         calc_tree = ttk.Treeview(calc_frame, columns=calc_cols, show="headings", height=15)
         
-        calc_tree.heading(self.tr("Date"), text=self.tr("Date"))
-        calc_tree.column(self.tr("Date"), width=150, anchor=tk.W)
-        calc_tree.heading(self.tr("Calculation"), text=self.tr("Calculation"))
-        calc_tree.column(self.tr("Calculation"), width=250, anchor=tk.W)
-        calc_tree.heading(self.tr("Result"), text=self.tr("Result"))
-        calc_tree.column(self.tr("Result"), width=150, anchor=tk.W)
+        calc_tree.heading(self.tr("Date"), text=self.tr("Date"), anchor=tk.CENTER)
+        calc_tree.column(self.tr("Date"), width=150, anchor=tk.CENTER, stretch=True)
+        calc_tree.heading(self.tr("Calculation"), text=self.tr("Calculation"), anchor=tk.CENTER)
+        calc_tree.column(self.tr("Calculation"), width=250, anchor=tk.CENTER, stretch=True)
+        calc_tree.heading(self.tr("Result"), text=self.tr("Result"), anchor=tk.CENTER)
+        calc_tree.column(self.tr("Result"), width=150, anchor=tk.CENTER, stretch=True)
         
         calc_tree.tag_configure("odd", background=T.get("tree_odd", "#34495E"), foreground=T.get("tree_fg", "white"))
         calc_tree.tag_configure("even", background=T.get("tree_even", "#2C3E50"), foreground=T.get("tree_fg", "white"))
@@ -1015,7 +1015,12 @@ class DigiCalGUI:
         
         for i, (expr, result, timestamp) in enumerate(self.history_manager.get_calculation_history()):
             tag = "even" if i % 2 == 0 else "odd"
-            calc_tree.insert("", tk.END, values=(timestamp, expr, result), tags=(tag,))
+            try:
+                from datetime import datetime as _dt
+                short_ts = _dt.strptime(str(timestamp)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+            except Exception:
+                short_ts = str(timestamp)[:10]
+            calc_tree.insert("", tk.END, values=(short_ts, expr, result), tags=(tag,))
 
         trans_frame = tk.Frame(notebook, bg=T["bg"])
         notebook.add(trans_frame, text=self.tr("Transactions"))
@@ -1027,17 +1032,17 @@ class DigiCalGUI:
         trans_tree = ttk.Treeview(trans_frame, columns=trans_cols, show="headings", height=15)
         
         col_config = {
-            "Date":     (100, tk.W),
+            "Date":     (100, tk.CENTER),
             "Type":     (60,  tk.CENTER),
-            "Amt":      (70,  tk.E),
-            "Category": (200, tk.W),
+            "Amt":      (70,  tk.CENTER),
+            "Category": (200, tk.CENTER),
             "Via":      (60,  tk.CENTER),
-            "By":       (90,  tk.W),
+            "By":       (90,  tk.CENTER),
         }
         for col in trans_cols:
             w, anc = col_config[col]
-            trans_tree.heading(col, text=col, anchor=anc)
-            trans_tree.column(col, width=w, minwidth=w, anchor=anc, stretch=True)
+            trans_tree.heading(col, text=col, anchor=tk.CENTER)
+            trans_tree.column(col, width=w, minwidth=w, anchor=tk.CENTER, stretch=True)
             
         trans_tree.tag_configure("odd", background=T.get("tree_odd", "#34495E"), foreground=T.get("tree_fg", "white"))
         trans_tree.tag_configure("even", background=T.get("tree_even", "#2C3E50"), foreground=T.get("tree_fg", "white"))
