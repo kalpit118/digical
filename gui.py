@@ -2717,6 +2717,7 @@ class DigiCalGUI:
 
         self._due_customer_toggle = toggle_tab
         self._due_customer_dialog_open = True
+        self._due_customer_tab_var = tab_var        # expose for keypad nav
         
         def on_destroy(e):
             if e.widget == ov:
@@ -3985,58 +3986,69 @@ class DigiCalGUI:
                     edit_btn.invoke()
                 return
 
-        # SETTLE DUE OVERLAY OVERRIDE
+        # ── SETTLE DUE OVERLAY OVERRIDE ───────────────────────────────────────
         if getattr(self, '_settle_due_open', False) and hasattr(self, '_settle_due_widgets'):
             widgets = [w for w in self._settle_due_widgets if w.winfo_exists()]
             if widgets:
                 try:
-                    curr_idx = widgets.index(focused) if focused in widgets else 0
+                    curr_idx = widgets.index(focused)
                 except ValueError:
-                    curr_idx = 0
+                    # Focus not yet in our list — grab first widget
+                    widgets[0].focus_set()
+                    return
                 if action in ("dir_down", "dir_right"):
-                    nxt = widgets[(curr_idx + 1) % len(widgets)]
-                    nxt.focus_set()
+                    widgets[(curr_idx + 1) % len(widgets)].focus_set()
                     return
                 elif action in ("dir_up", "dir_left"):
-                    prv = widgets[(curr_idx - 1) % len(widgets)]
-                    prv.focus_set()
+                    widgets[(curr_idx - 1) % len(widgets)].focus_set()
                     return
                 elif action == "equals":
-                    if focused and focused.winfo_class() == "Button":
+                    if focused.winfo_class() in ("Button", "TButton"):
                         focused.invoke()
                     return
 
-        # DUE CUSTOMER DIALOG OVERRIDE (tab + field navigation)
+        # ── DUE CUSTOMER DIALOG OVERRIDE ─────────────────────────────────────
         if getattr(self, '_due_customer_dialog_open', False):
             confirm_btn = getattr(self, '_due_customer_confirm_btn', None)
             cancel_btn  = getattr(self, '_due_customer_cancel_btn', None)
-            is_existing = True
-            try:
-                entries = self._due_customer_entries_existing if is_existing else self._due_customer_entries_new
-            except Exception:
-                entries = []
-            all_focus = entries + ([confirm_btn] if confirm_btn else []) + ([cancel_btn] if cancel_btn else [])
-            all_focus = [w for w in all_focus if w and w.winfo_exists()]
+            tab_var     = getattr(self, '_due_customer_tab_var', None)
+            is_existing = (tab_var is None or tab_var.get() == "existing")
 
-            if action in ("dir_left", "dir_right") and focused not in all_focus:
-                if hasattr(self, '_due_customer_toggle'):
-                    self._due_customer_toggle()
-                return
-            if action in ("dir_left", "dir_right") and focused in (confirm_btn, cancel_btn):
-                # Toggle between Confirm and Cancel
-                other = cancel_btn if focused == confirm_btn else confirm_btn
-                if other and other.winfo_exists():
+            # Build ordered widget list for current tab
+            if is_existing:
+                raw_entries = getattr(self, '_due_customer_entries_existing', [])
+            else:
+                raw_entries = getattr(self, '_due_customer_entries_new', [])
+            entries = [w for w in raw_entries if w and w.winfo_exists()]
+            btns    = [w for w in [confirm_btn, cancel_btn] if w and w.winfo_exists()]
+            all_w   = entries + btns
+
+            if not all_w:
+                return  # dialog not fully built yet
+
+            in_all = focused in all_w
+
+            if action in ("dir_left", "dir_right"):
+                if focused in btns:
+                    # L/R between Confirm and Cancel
+                    other = btns[(btns.index(focused) + 1) % len(btns)]
                     other.focus_set()
+                else:
+                    # L/R anywhere else → switch tab
+                    if hasattr(self, '_due_customer_toggle'):
+                        self._due_customer_toggle()
                 return
-            if action in ("dir_down", "dir_right") and focused in all_focus:
-                idx = all_focus.index(focused)
-                all_focus[(idx + 1) % len(all_focus)].focus_set()
+
+            if action == "dir_down" and in_all:
+                all_w[(all_w.index(focused) + 1) % len(all_w)].focus_set()
                 return
-            elif action in ("dir_up", "dir_left") and focused in all_focus:
-                idx = all_focus.index(focused)
-                all_focus[(idx - 1) % len(all_focus)].focus_set()
+            elif action == "dir_up" and in_all:
+                all_w[(all_w.index(focused) - 1) % len(all_w)].focus_set()
                 return
-            elif action == "equals" and focused in (confirm_btn, cancel_btn):
+            elif action == "dir_down":
+                all_w[0].focus_set()
+                return
+            elif action == "equals" and focused in btns:
                 focused.invoke()
                 return
 
@@ -4102,25 +4114,6 @@ class DigiCalGUI:
                     if curr.winfo_ismapped():
                         return curr
             return None
-
-        # DUE CUSTOMER DIALOG OVERRIDE
-        if getattr(self, '_due_customer_dialog_open', False):
-            if action in ("dir_left", "dir_right"):
-                if hasattr(self, '_due_customer_toggle'):
-                    self._due_customer_toggle()
-                return
-            elif action == "dir_down":
-                nxt = _get_interactive_focus(focused, True) or focused.tk_focusNext()
-                if nxt:
-                    nxt.focus_set()
-                    self._ensure_visible(nxt)
-                return
-            elif action == "dir_up":
-                prv = _get_interactive_focus(focused, False) or focused.tk_focusPrev()
-                if prv:
-                    prv.focus_set()
-                    self._ensure_visible(prv)
-                return
 
         # By default, use Tab traversal hierarchy for D-Pad
         if action in ("dir_right", "dir_down"):
