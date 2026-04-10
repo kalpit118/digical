@@ -3044,6 +3044,7 @@ class DigiCalGUI:
 
         lbl(0, self.tr("Name *:"))
         name_e = entry(0, name)
+        name_e.t9_mode = "alpha"
 
         lbl(1, self.tr("Phone *:"))
         phone_var = tk.StringVar(value=phone or "")
@@ -3054,9 +3055,11 @@ class DigiCalGUI:
                            insertbackground=T["text"], relief=tk.FLAT,
                            highlightthickness=1, highlightbackground=T["shadow_dark"])
         phone_e.grid(row=1, column=1, pady=3, padx=6)
+        phone_e.t9_mode = "num"
 
         lbl(2, self.tr("Email:"))
         email_e = entry(2, email or "")
+        email_e.t9_mode = "alphanum"
 
         def _update():
             new_name = name_e.get().strip()
@@ -3077,10 +3080,22 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=12)
-        self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals",
-                      width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
-                      width=10, height=2).pack(side=tk.LEFT, padx=5)
+        update_btn = self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals",
+                      width=10, height=2)
+        update_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn = self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
+                      width=10, height=2)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+
+        self._edit_customer_widgets = [name_e, phone_e, email_e, update_btn, cancel_btn]
+        self._edit_customer_open = True
+        
+        def _on_edit_close(e):
+            if e.widget == ov:
+                self._edit_customer_open = False
+        ov.bind("<Destroy>", _on_edit_close, add="+")
+        
+        self.root.after(150, lambda: name_e.focus_force())
 
     # ── Products (Inventory) ────────────────────────────────────────────
     def show_products_mode(self):
@@ -3953,6 +3968,26 @@ class DigiCalGUI:
         # Must be BEFORE Customers mode check (mode is still "customers" while overlay is open)
         if getattr(self, '_settle_due_open', False) and hasattr(self, '_settle_due_widgets'):
             widgets = [w for w in self._settle_due_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused)
+                except ValueError:
+                    widgets[0].focus_set()
+                    return
+                if action in ("dir_down", "dir_right"):
+                    widgets[(curr_idx + 1) % len(widgets)].focus_set()
+                    return
+                elif action in ("dir_up", "dir_left"):
+                    widgets[(curr_idx - 1) % len(widgets)].focus_set()
+                    return
+                elif action == "equals":
+                    if focused.winfo_class() in ("Button", "TButton"):
+                        focused.invoke()
+                    return
+
+        # ── EDIT CUSTOMER DIALOG OVERRIDE ────────────────────────────────────
+        if getattr(self, '_edit_customer_open', False) and hasattr(self, '_edit_customer_widgets'):
+            widgets = [w for w in self._edit_customer_widgets if w.winfo_exists()]
             if widgets:
                 try:
                     curr_idx = widgets.index(focused)
