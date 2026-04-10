@@ -3237,6 +3237,7 @@ class DigiCalGUI:
 
         lbl(0, self.tr("Name *:"))
         name_e = entry(0)
+        name_e.t9_mode = "alphanum"
 
         lbl(1, self.tr("Category *:"))
         cat_var = tk.StringVar()
@@ -3246,12 +3247,15 @@ class DigiCalGUI:
 
         lbl(2, self.tr("Total Qty *:"))
         tqty_e = entry(2)
+        tqty_e.t9_mode = "num"
 
         lbl(3, self.tr("Left Qty *:"))
         lqty_e = entry(3)
+        lqty_e.t9_mode = "num"
 
         lbl(4, self.tr("Price (₹) *:"))
         price_e = entry(4)
+        price_e.t9_mode = "num"
         
         # Auto-fill left_qty when total_qty changes (only if left_qty is empty)
         def _sync_left(e):
