@@ -1988,11 +1988,11 @@ class DigiCalGUI:
         except:
             local_ip = '127.0.0.1'
             
-        tk.Label(portal_info, text=self.tr("Access from this Device:"), font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
-        tk.Label(portal_info, text=f"http://localhost:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W, pady=(0, 4))
+        tk.Label(portal_info, text=self.tr("Access from this Device:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=f"http://localhost:{config.WEB_PORT}", font=(config.LABEL_FONT[0], config.LABEL_FONT[1] + 1, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W, pady=(0, 4))
         
-        tk.Label(portal_info, text=self.tr("Access from Phone/Laptop (Same WiFi):"), font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
-        tk.Label(portal_info, text=f"http://{local_ip}:{config.WEB_PORT}", font=(config.LABEL_FONT[0], 11, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=self.tr("Access from Phone/Laptop (Same WiFi):"), font=config.LABEL_FONT, bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(portal_info, text=f"http://{local_ip}:{config.WEB_PORT}", font=(config.LABEL_FONT[0], config.LABEL_FONT[1] + 1, "bold"), bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 5.5) SYSTEM UPDATE
@@ -2013,11 +2013,11 @@ class DigiCalGUI:
         info_f.pack(fill=tk.X, pady=(0, 5))
         
         v_str = f"v{config.VERSION}"
-        tk.Label(info_f, text=f"{self.tr('Current Version:')} {v_str}", font=(config.LABEL_FONT[0], 9, "bold"), bg=T["bg"], fg=T["text"]).pack(anchor=tk.W)
-        tk.Label(info_f, text=f"{self.tr('Build Date:')} {cur_build}", font=(config.LABEL_FONT[0], 8), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
-        tk.Label(info_f, text=f"{self.tr('Commit:')} {cur_sha[:7]}", font=(config.LABEL_FONT[0], 8), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(info_f, text=f"{self.tr('Current Version:')} {v_str}", font=(config.LABEL_FONT[0], config.LABEL_FONT[1], "bold"), bg=T["bg"], fg=T["text"]).pack(anchor=tk.W)
+        tk.Label(info_f, text=f"{self.tr('Build Date:')} {cur_build}", font=(config.LABEL_FONT[0], max(8, config.LABEL_FONT[1] - 1)), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
+        tk.Label(info_f, text=f"{self.tr('Commit:')} {cur_sha[:7]}", font=(config.LABEL_FONT[0], max(8, config.LABEL_FONT[1] - 1)), bg=T["bg"], fg=T["subtext"]).pack(anchor=tk.W)
 
-        up_status_lbl = tk.Label(up_frame, textvariable=up_status_var, font=(config.LABEL_FONT[0], 9), bg=T["bg"], fg=T["accent"])
+        up_status_lbl = tk.Label(up_frame, textvariable=up_status_var, font=config.LABEL_FONT, bg=T["bg"], fg=T["accent"])
         up_status_lbl.pack(anchor=tk.W, pady=(5, 0))
 
         def _check_up():
@@ -2112,16 +2112,20 @@ class DigiCalGUI:
         full_v = f"v{config.VERSION} Build {b_date} ({sha[:7]})"
         
         tk.Label(c6, text=f"{config.APP_NAME}",
-                 font=(config.BUTTON_FONT[0], 10, "bold"),
+                 font=(config.LABEL_FONT[0], config.LABEL_FONT[1] + 1, "bold"),
                  bg=T["bg"], fg=T["text"]).pack(anchor=tk.W)
         tk.Label(c6, text=full_v,
-                 font=(config.BUTTON_FONT[0], 9),
+                 font=(config.LABEL_FONT[0], max(8, config.LABEL_FONT[1] - 1)),
                  bg=T["bg"], fg=T["accent"]).pack(anchor=tk.W)
 
-        # ── Close button ───────────────────────────────────────────────────
+        # ── Power Off button ───────────────────────────────────────────────
         tk.Frame(scroll_frame, bg=T["bg"], height=6).pack()
-        self._neu_btn(scroll_frame, self.tr("Close"), command=close,
-                     kind="mode", width=10, height=2).pack(pady=(0, 10))
+        
+        def _power_off():
+            self._show_confirm(self.tr("Shutdown system?"), lambda: __import__('os').system('sudo poweroff'))
+            
+        self._neu_btn(scroll_frame, self.tr("Power Off"), command=_power_off,
+                     kind="danger", width=12, height=2).pack(pady=(0, 10))
 
         # Start cursor on Language Option
         self.root.after(100, lambda: [lang_combo.focus_set(), self._ensure_visible(lang_combo)])
