@@ -3949,8 +3949,75 @@ class DigiCalGUI:
                     nb.select(tabs[nxt_idx])
                 return
 
-        # CUSTOMERS MODE OVERRIDE
-        if getattr(self, 'current_mode', '') == "customers" and hasattr(self, '_customers_tree'):
+        # ── SETTLE DUE OVERLAY OVERRIDE ─────────────────────────────────────────
+        # Must be BEFORE Customers mode check (mode is still "customers" while overlay is open)
+        if getattr(self, '_settle_due_open', False) and hasattr(self, '_settle_due_widgets'):
+            widgets = [w for w in self._settle_due_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused)
+                except ValueError:
+                    widgets[0].focus_set()
+                    return
+                if action in ("dir_down", "dir_right"):
+                    widgets[(curr_idx + 1) % len(widgets)].focus_set()
+                    return
+                elif action in ("dir_up", "dir_left"):
+                    widgets[(curr_idx - 1) % len(widgets)].focus_set()
+                    return
+                elif action == "equals":
+                    if focused.winfo_class() in ("Button", "TButton"):
+                        focused.invoke()
+                    return
+
+        # ── DUE CUSTOMER DIALOG OVERRIDE ─────────────────────────────────────────
+        # Must be BEFORE Customers mode check (mode is still "customers" while dialog is open)
+        if getattr(self, '_due_customer_dialog_open', False):
+            confirm_btn = getattr(self, '_due_customer_confirm_btn', None)
+            cancel_btn  = getattr(self, '_due_customer_cancel_btn', None)
+            tab_var     = getattr(self, '_due_customer_tab_var', None)
+            is_existing = (tab_var is None or tab_var.get() == "existing")
+
+            if is_existing:
+                raw_entries = getattr(self, '_due_customer_entries_existing', [])
+            else:
+                raw_entries = getattr(self, '_due_customer_entries_new', [])
+            entries = [w for w in raw_entries if w and w.winfo_exists()]
+            btns    = [w for w in [confirm_btn, cancel_btn] if w and w.winfo_exists()]
+            all_w   = entries + btns
+
+            if not all_w:
+                return
+
+            in_all = focused in all_w
+
+            if action in ("dir_left", "dir_right"):
+                if focused in btns:
+                    other = btns[(btns.index(focused) + 1) % len(btns)]
+                    other.focus_set()
+                else:
+                    if hasattr(self, '_due_customer_toggle'):
+                        self._due_customer_toggle()
+                return
+
+            if action == "dir_down" and in_all:
+                all_w[(all_w.index(focused) + 1) % len(all_w)].focus_set()
+                return
+            elif action == "dir_up" and in_all:
+                all_w[(all_w.index(focused) - 1) % len(all_w)].focus_set()
+                return
+            elif action == "dir_down":
+                all_w[0].focus_set()
+                return
+            elif action == "equals" and focused in btns:
+                focused.invoke()
+                return
+
+        # CUSTOMERS MODE OVERRIDE (only when no dialog is open)
+        if getattr(self, 'current_mode', '') == "customers" and hasattr(self, '_customers_tree') \
+                and not getattr(self, '_due_customer_dialog_open', False) \
+                and not getattr(self, '_settle_due_open', False):
+
             tree = self._customers_tree
             edit_btn = getattr(self, '_customers_edit_btn', None)
             on_tree = (focused == tree)
