@@ -162,6 +162,8 @@ class DigiCalGUI:
         def _set_icursor_end(e):
             try: e.widget.icursor(tk.END)
             except Exception: pass
+            if e.widget.winfo_class() == "TCombobox":
+                self._last_combobox = e.widget
         self.root.bind_class("Entry", "<FocusIn>", _set_icursor_end)
         self.root.bind_class("TCombobox", "<FocusIn>", _set_icursor_end)
 
@@ -3903,13 +3905,10 @@ class DigiCalGUI:
                     lb = f"{pd}.f.l"
                     if action == 'dir_left':
                         self.root.tk.call('event', 'generate', lb, '<Escape>')
-                    elif action == 'equals':
+                    elif action in ('equals', 'dir_right'):
                         self.root.tk.call('event', 'generate', lb, '<Return>')
-                    elif action in ('dir_right', 'dir_up', 'dir_down'):
-                        if action == 'dir_right' and getattr(self, 'current_mode', '') == "calculator":
-                            pass
-                        else:
-                            self.root.tk.call('event', 'generate', lb, f'<{keysym}>')
+                    elif action in ('dir_up', 'dir_down'):
+                        self.root.tk.call('event', 'generate', lb, f'<{keysym}>')
             except Exception:
                 pass
             return
