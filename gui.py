@@ -1492,9 +1492,14 @@ class DigiCalGUI:
             # Reset the overlay close tracker if this was the tracked overlay
             if getattr(self, '_active_overlay_close', None) is _close:
                 self._active_overlay_close = None
-            # If this overlay was opened while in a non-calculator mode (e.g. Settings
-            # overlay runs on top of switch_mode("settings")), restore the home screen.
-            if _mode_on_open != 'calculator' and getattr(self, 'current_mode', '') == _mode_on_open:
+            # If the overlay was opened from a non-calculator mode (e.g. Customers, Settings),
+            # return to that mode; only switch to calculator if mode was calculator itself.
+            if _mode_on_open == 'calculator':
+                pass  # nothing to restore
+            elif _mode_on_open in ('customers',):
+                # Stay in customers — just refresh the mode
+                self.switch_mode_customers()
+            elif _mode_on_open != 'calculator' and getattr(self, 'current_mode', '') == _mode_on_open:
                 self.switch_mode('calculator')
             # Restore Escape to simply open the App Launcher (default idle behavior)
             self.root.bind("<Escape>", lambda e: self._show_app_launcher())
@@ -2746,10 +2751,18 @@ class DigiCalGUI:
 
         btn_row = tk.Frame(body, bg=T["bg"])
         btn_row.pack(pady=16)
-        self._neu_btn(btn_row, self.tr("Confirm"), command=confirm, kind="equals",
-                      width=14, height=2).pack(side=tk.LEFT, padx=10)
-        self._neu_btn(btn_row, self.tr("Cancel"), command=close, kind="mode",
-                      width=14, height=2).pack(side=tk.LEFT, padx=10)
+        due_confirm_btn = self._neu_btn(btn_row, self.tr("Confirm"), command=confirm, kind="equals",
+                       width=14, height=2)
+        due_confirm_btn.pack(side=tk.LEFT, padx=10)
+        due_cancel_btn = self._neu_btn(btn_row, self.tr("Cancel"), command=close, kind="mode",
+                       width=14, height=2)
+        due_cancel_btn.pack(side=tk.LEFT, padx=10)
+
+        # Store for keypad navigation: entries + action buttons
+        self._due_customer_confirm_btn = due_confirm_btn
+        self._due_customer_cancel_btn  = due_cancel_btn
+        self._due_customer_entries_existing = [existing_id_entry, existing_phone_entry]
+        self._due_customer_entries_new = [new_name_entry, new_phone_entry, new_email_entry]
 
     def show_customers_mode(self):
         """Show customer list with total unsettled dues."""
@@ -2933,10 +2946,24 @@ class DigiCalGUI:
 
         br = tk.Frame(body, bg=T["bg"])
         br.pack(pady=12)
-        self._neu_btn(br, self.tr("Confirm"), command=confirm_settle, kind="equals",
-                      width=10, height=2).pack(side=tk.LEFT, padx=6)
-        self._neu_btn(br, self.tr("Cancel"), command=close, kind="mode",
-                      width=10, height=2).pack(side=tk.LEFT, padx=6)
+        confirm_btn = self._neu_btn(br, self.tr("Confirm"), command=confirm_settle, kind="equals",
+                      width=10, height=2)
+        confirm_btn.pack(side=tk.LEFT, padx=6)
+        cancel_btn = self._neu_btn(br, self.tr("Cancel"), command=close, kind="mode",
+                      width=10, height=2)
+        cancel_btn.pack(side=tk.LEFT, padx=6)
+
+        # Store widgets for keypad navigation
+        self._settle_due_widgets = [amt_entry, confirm_btn, cancel_btn]
+        self._settle_due_open = True
+
+        def _on_settle_close(e):
+            if e.widget == ov:
+                self._settle_due_open = False
+        ov.bind("<Destroy>", _on_settle_close, add="+")
+
+        # Focus the amount entry
+        self.root.after(150, lambda: amt_entry.focus_force())
 
     def _customer_modify_dialog(self, row_values):
         if not row_values: return
@@ -3958,7 +3985,63 @@ class DigiCalGUI:
                     edit_btn.invoke()
                 return
 
+        # SETTLE DUE OVERLAY OVERRIDE
+        if getattr(self, '_settle_due_open', False) and hasattr(self, '_settle_due_widgets'):
+            widgets = [w for w in self._settle_due_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused) if focused in widgets else 0
+                except ValueError:
+                    curr_idx = 0
+                if action in ("dir_down", "dir_right"):
+                    nxt = widgets[(curr_idx + 1) % len(widgets)]
+                    nxt.focus_set()
+                    return
+                elif action in ("dir_up", "dir_left"):
+                    prv = widgets[(curr_idx - 1) % len(widgets)]
+                    prv.focus_set()
+                    return
+                elif action == "equals":
+                    if focused and focused.winfo_class() == "Button":
+                        focused.invoke()
+                    return
+
+        # DUE CUSTOMER DIALOG OVERRIDE (tab + field navigation)
+        if getattr(self, '_due_customer_dialog_open', False):
+            confirm_btn = getattr(self, '_due_customer_confirm_btn', None)
+            cancel_btn  = getattr(self, '_due_customer_cancel_btn', None)
+            is_existing = True
+            try:
+                entries = self._due_customer_entries_existing if is_existing else self._due_customer_entries_new
+            except Exception:
+                entries = []
+            all_focus = entries + ([confirm_btn] if confirm_btn else []) + ([cancel_btn] if cancel_btn else [])
+            all_focus = [w for w in all_focus if w and w.winfo_exists()]
+
+            if action in ("dir_left", "dir_right") and focused not in all_focus:
+                if hasattr(self, '_due_customer_toggle'):
+                    self._due_customer_toggle()
+                return
+            if action in ("dir_left", "dir_right") and focused in (confirm_btn, cancel_btn):
+                # Toggle between Confirm and Cancel
+                other = cancel_btn if focused == confirm_btn else confirm_btn
+                if other and other.winfo_exists():
+                    other.focus_set()
+                return
+            if action in ("dir_down", "dir_right") and focused in all_focus:
+                idx = all_focus.index(focused)
+                all_focus[(idx + 1) % len(all_focus)].focus_set()
+                return
+            elif action in ("dir_up", "dir_left") and focused in all_focus:
+                idx = all_focus.index(focused)
+                all_focus[(idx - 1) % len(all_focus)].focus_set()
+                return
+            elif action == "equals" and focused in (confirm_btn, cancel_btn):
+                focused.invoke()
+                return
+
         # Smart Focus jumping for left/right/up/down
+
         wtype = focused.winfo_class()
         
         if wtype in ("Treeview", "Listbox"):
