@@ -158,6 +158,13 @@ class DigiCalGUI:
         self.root.title(config.APP_NAME)
         self.root.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}")
 
+        # Global auto-icursor positioning for keypad navigability
+        def _set_icursor_end(e):
+            try: e.widget.icursor(tk.END)
+            except Exception: pass
+        self.root.bind_class("Entry", "<FocusIn>", _set_icursor_end)
+        self.root.bind_class("TCombobox", "<FocusIn>", _set_icursor_end)
+
         # Initialize components
         self.db = Database()
         self.calculator = Calculator()
