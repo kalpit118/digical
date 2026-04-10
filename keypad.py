@@ -225,18 +225,21 @@ class Keypad:
 
     def _scan_loop(self):
         """Continuous scanning loop with debounce."""
+        self._cooldowns = getattr(self, '_cooldowns', {})
+        
         while self._running:
             current_keys = self.scan_once()
-
-            # Debounce: if we detected something, wait and confirm
-            if current_keys:
-                time.sleep(DEBOUNCE_MS / 1000.0)
-                confirmed = self.scan_once()
-                current_keys = current_keys & confirmed  # only keep stable presses
-
-            # Detect newly pressed keys
-            new_presses = current_keys - self._prev_keys
             now = time.time()
+            
+            new_presses = set()
+            
+            # Detect leading-edge genuine new presses with anti-bounce cooldown
+            for key in current_keys:
+                if key not in self._prev_keys:
+                    if now >= self._cooldowns.get(key, 0):
+                        new_presses.add(key)
+                        # Block subsequent false triggers from switch bounce for 50ms
+                        self._cooldowns[key] = now + (DEBOUNCE_MS * 2.5 / 1000.0) 
             
             # Handle auto-repeat for held keys
             for key in current_keys & self._prev_keys:
@@ -252,8 +255,10 @@ class Keypad:
                 self._last_repeat_times.pop(key, None)
 
             # Record initial press times for genuinely new presses
-            for key in current_keys - self._prev_keys:
-                self._press_times[key] = now
+            for key in new_presses:
+                # Only reset press time if it's a fresh press (not a repeat)
+                if key not in self._press_times:
+                    self._press_times[key] = now
 
             self._prev_keys = current_keys
 
