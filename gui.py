@@ -856,6 +856,7 @@ class DigiCalGUI:
                      ).grid(row=4, column=0, columnspan=2, pady=5)
 
         self.show_transaction_summary('sales')
+        self.root.after(250, lambda: amount_entry.focus_force())
 
 
     def show_expense_mode(self):
@@ -950,6 +951,7 @@ class DigiCalGUI:
                      ).grid(row=4, column=0, columnspan=2, pady=5)
 
         self.show_transaction_summary('expense')
+        self.root.after(250, lambda: amount_entry.focus_force())
 
 
     def show_transaction_summary(self, trans_type):
@@ -1059,11 +1061,23 @@ class DigiCalGUI:
 
         notebook.bind("<<NotebookTabChanged>>", _on_tab_change)
 
+        self._history_notebook = notebook
+
         # Initial focus setup for keypad navigation
-        calc_tree.focus_set()
-        if calc_tree.get_children():
-            calc_tree.selection_set(calc_tree.get_children()[0])
-            calc_tree.focus(calc_tree.get_children()[0])
+        def _focus_history():
+            if notebook.winfo_exists():
+                sel = notebook.select()
+                if sel:
+                    w = self.root.nametowidget(sel)
+                    for c in w.winfo_children():
+                        if c.winfo_class() == "Treeview":
+                            c.focus_force()
+                            if not c.selection() and c.get_children():
+                                c.selection_set(c.get_children()[0])
+                                c.focus(c.get_children()[0])
+                            break
+                            
+        self.root.after(250, _focus_history)
 
 
     def show_graphs_mode(self):
@@ -3845,6 +3859,17 @@ class DigiCalGUI:
                 focused.event_generate("<Return>")
             return
             
+        # HISTORY MODE OVERRIDE (Tab Switching)
+        if getattr(self, 'current_mode', '') == "history" and hasattr(self, '_history_notebook'):
+            if action in ("dir_left", "dir_right") and focused:
+                nb = self._history_notebook
+                tabs = nb.tabs()
+                if tabs:
+                    curr_idx = tabs.index(nb.select())
+                    nxt_idx = (curr_idx + 1) % len(tabs) if action == "dir_right" else (curr_idx - 1) % len(tabs)
+                    nb.select(tabs[nxt_idx])
+                return
+
         # Smart Focus jumping for left/right/up/down
         wtype = focused.winfo_class()
         
@@ -3854,7 +3879,8 @@ class DigiCalGUI:
                 return
             elif action == "dir_right" or action == "equals":
                 # Trigger internal binding for selection/double-click
-                focused.event_generate("<Return>")
+                if action == "equals":
+                    focused.event_generate("<Return>")
                 return
         elif wtype == "TCombobox":
             if action == "dir_right":
