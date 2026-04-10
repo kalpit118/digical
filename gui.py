@@ -1114,13 +1114,20 @@ class DigiCalGUI:
         # Bind resize event for responsive graphs
         self.graph_frame.bind("<Configure>", self._on_graph_resize)
 
+        # Store for keypad navigation wrap-around
+        self._graphs_scrollable_frame = scrollable_frame
+
         # Show default graph
         self.show_weekly_graph()
 
-        # Set initial focus to the first button
-        if scrollable_frame.winfo_children():
-            self.root.after(100, lambda: scrollable_frame.winfo_children()[0].focus_set())
-
+        # Set initial focus to the first button robustly
+        def _focus_first():
+            if scrollable_frame.winfo_exists() and scrollable_frame.winfo_children():
+                btn = scrollable_frame.winfo_children()[0]
+                btn.focus_force()
+                self._ensure_visible(btn)
+                
+        self.root.after(250, _focus_first)
 
     def clear_graph_frame(self):
         """Clear graph display"""
@@ -3850,6 +3857,26 @@ class DigiCalGUI:
                 focused.invoke() # Toggle the checkbox
                 return
                 
+        # GRAPHS MODE OVERRIDE (Wrap-around navigation)
+        if getattr(self, 'current_mode', '') == "graphs" and hasattr(self, '_graphs_scrollable_frame'):
+            if focused and focused.master == self._graphs_scrollable_frame:
+                children = self._graphs_scrollable_frame.winfo_children()
+                if children:
+                    try:
+                        idx = children.index(focused)
+                        if action in ("dir_right", "dir_down"):
+                            nxt_idx = (idx + 1) % len(children)
+                            children[nxt_idx].focus_set()
+                            self._ensure_visible(children[nxt_idx])
+                            return
+                        elif action in ("dir_left", "dir_up"):
+                            prv_idx = (idx - 1) % len(children)
+                            children[prv_idx].focus_set()
+                            self._ensure_visible(children[prv_idx])
+                            return
+                    except ValueError:
+                        pass
+
         # DUE CUSTOMER DIALOG OVERRIDE
         if getattr(self, '_due_customer_dialog_open', False):
             if action in ("dir_left", "dir_right"):
