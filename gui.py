@@ -2846,6 +2846,18 @@ class DigiCalGUI:
             self.show_due_customer_dialog(on_found)
             
         edit_btn.config(command=_open_customer_finder)
+
+        # Store refs for keypad navigation
+        self._customers_tree = tree
+        self._customers_edit_btn = edit_btn
+
+        # Return key on tree opens Settle Due for selected customer
+        def _tree_return(event=None):
+            on_row_click(None)
+        tree.bind("<Return>", _tree_return)
+
+        # Robust initial focus onto the tree
+        self.root.after(250, lambda: tree.focus_force())
     
     def switch_mode_customers(self):
         """Helper to cleanly refresh Customers mode."""
@@ -3907,6 +3919,43 @@ class DigiCalGUI:
                     curr_idx = tabs.index(nb.select())
                     nxt_idx = (curr_idx + 1) % len(tabs) if action == "dir_right" else (curr_idx - 1) % len(tabs)
                     nb.select(tabs[nxt_idx])
+                return
+
+        # CUSTOMERS MODE OVERRIDE
+        if getattr(self, 'current_mode', '') == "customers" and hasattr(self, '_customers_tree'):
+            tree = self._customers_tree
+            edit_btn = getattr(self, '_customers_edit_btn', None)
+            on_tree = (focused == tree)
+            on_btn  = (focused == edit_btn)
+
+            if action in ("dir_up", "dir_down") and (on_tree or not on_btn):
+                # Navigate rows in tree
+                if not on_tree:
+                    tree.focus_set()
+                else:
+                    tree.event_generate(f"<{keysym}>")
+                return
+
+            if action in ("dir_left", "dir_right"):
+                if on_tree and edit_btn:
+                    edit_btn.focus_set()
+                elif on_btn:
+                    tree.focus_set()
+                return
+
+            if action == "equals":
+                if on_tree:
+                    item = tree.focus()
+                    if item:
+                        vals = tree.item(item, "values")
+                        if vals and vals[0] != "-":
+                            try:
+                                cid, name, phone, due_str = vals
+                                self.show_settle_due_dialog(cid, name, phone, float(due_str))
+                            except Exception:
+                                pass
+                elif on_btn and edit_btn:
+                    edit_btn.invoke()
                 return
 
         # Smart Focus jumping for left/right/up/down
