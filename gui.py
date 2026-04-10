@@ -1020,17 +1020,27 @@ class DigiCalGUI:
         trans_frame = tk.Frame(notebook, bg=T["bg"])
         notebook.add(trans_frame, text=self.tr("Transactions"))
         
-        trans_cols = (self.tr("Date"), self.tr("Type"), self.tr("Amount (₹)"), self.tr("Category"), self.tr("Method"), self.tr("Handler"))
+        # Compact column layout fitting 720px wide display (minus scrollbar ~15px = 705px usable)
+        # Date(MM-DD HH:MM)=82, Type=42, ₹Amt=72, Category=200, Via=52, By=85  → total=533+padding fits
+        trans_cols = ("Date", "Type", "₹ Amt", "Category", "Via", "By")
         trans_tree = ttk.Treeview(trans_frame, columns=trans_cols, show="headings", height=15)
         
-        col_widths = {self.tr("Date"): 150, self.tr("Type"): 70, self.tr("Amount (₹)"): 100, self.tr("Category"): 180, self.tr("Method"): 90, self.tr("Handler"): 120}
+        col_config = {
+            "Date":     (82,  tk.W),
+            "Type":     (42,  tk.CENTER),
+            "₹ Amt":    (72,  tk.E),
+            "Category": (200, tk.W),
+            "Via":      (52,  tk.CENTER),
+            "By":       (85,  tk.W),
+        }
         for col in trans_cols:
-            trans_tree.heading(col, text=col)
-            trans_tree.column(col, width=col_widths[col], anchor=tk.W)
+            w, anc = col_config[col]
+            trans_tree.heading(col, text=col, anchor=anc)
+            trans_tree.column(col, width=w, minwidth=w, anchor=anc, stretch=(col == "Category"))
             
         trans_tree.tag_configure("odd", background=T.get("tree_odd", "#34495E"), foreground=T.get("tree_fg", "white"))
         trans_tree.tag_configure("even", background=T.get("tree_even", "#2C3E50"), foreground=T.get("tree_fg", "white"))
-        trans_tree.tag_configure("sales", foreground="#2ECC71") # override colors with tags? No, let's keep it simple.
+        trans_tree.tag_configure("sales_tag", foreground="#2ECC71")
         
         trans_sb = ttk.Scrollbar(trans_frame, orient=tk.VERTICAL, command=trans_tree.yview)
         trans_tree.configure(yscrollcommand=trans_sb.set)
@@ -1038,14 +1048,24 @@ class DigiCalGUI:
         trans_sb.pack(side=tk.RIGHT, fill=tk.Y, padx=(0,5), pady=5)
         
         for i, trans in enumerate(self.history_manager.get_transaction_history()):
-            t_type = self.tr("Sales") if trans[1] == "sales" else self.tr("Expense")
+            t_type = "S" if trans[1] == "sales" else "E"
             amount = f"{trans[2]:.2f}"
-            category = trans[3]
-            date = trans[5] if len(trans) > 5 else "-"
+            category = trans[3] or "-"
+            raw_date = trans[5] if len(trans) > 5 else "-"
+            # Compact date: "04-09 14:32" from "2026-04-09 14:32:00"
+            try:
+                from datetime import datetime as _dt
+                dt = _dt.strptime(raw_date[:16], "%Y-%m-%d %H:%M")
+                short_date = dt.strftime("%m-%d %H:%M")
+            except Exception:
+                short_date = str(raw_date)[:11]
             payment_method = trans[7] if len(trans) > 7 and trans[7] else "Cash"
+            # Abbreviate payment method
+            method_abbrev = {"Cash": "Cash", "UPI": "UPI", "Card": "Card", "Due": "Due",
+                             "Net Banking": "Net", "Cheque": "Chq"}.get(payment_method, payment_method[:4])
             handler_name = trans[9] if len(trans) > 9 and trans[9] else "-"
             tag = "even" if i % 2 == 0 else "odd"
-            trans_tree.insert("", tk.END, values=(date, t_type, amount, category, payment_method, handler_name), tags=(tag,))
+            trans_tree.insert("", tk.END, values=(short_date, t_type, amount, category, method_abbrev, handler_name), tags=(tag,))
 
         def _on_tab_change(e):
             sel = notebook.select()
