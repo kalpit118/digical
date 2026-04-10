@@ -425,30 +425,46 @@ class DigiCalGUI:
         self.root.after(duration, lambda: toast.destroy() if toast.winfo_exists() else None)
 
     def _show_confirm(self, msg, on_yes, on_no=None):
-        """Show an inline confirmation bar instead of messagebox.askyesno."""
+        """Show a full-window confirmation prompt."""
         T = self.T
-        bar = tk.Frame(self.root, bg=T["warning"])
-        bar.place(relx=0.02, y=55, relwidth=0.96, height=48)
-        bar.lift()
-        tk.Label(bar, text=f"  \u26a0  {msg}",
-                 font=(config.BUTTON_FONT[0], 8, "bold"),
-                 bg=T["warning"], fg="#FFFFFF", anchor="w").pack(side=tk.LEFT, fill=tk.X, expand=True)
-
+        ov, body, close_cb = self._open_overlay(self.tr("Confirm Action"))
+        
+        # Center content frame
+        content = tk.Frame(body, bg=T["bg"])
+        content.pack(expand=True)
+        
+        # Warning icon/text
+        tk.Label(content, text="\u26a0", font=(config.BUTTON_FONT[0], 48), bg=T["bg"], fg=T["warning"]).pack(pady=(0, 10))
+        tk.Label(content, text=msg, font=(config.BUTTON_FONT[0], 16, "bold"), bg=T["bg"], fg=T["text"]).pack(pady=(0, 20))
+        
+        btn_frame = tk.Frame(content, bg=T["bg"])
+        btn_frame.pack()
+        
         def _yes():
-            bar.destroy()
+            close_cb()
             on_yes()
 
         def _no():
-            bar.destroy()
+            close_cb()
             if on_no:
                 on_no()
 
-        tk.Button(bar, text=" Yes ", font=(config.BUTTON_FONT[0], 8, "bold"),
-                  bg=T["danger"], fg="#FFFFFF", relief=tk.FLAT, bd=0,
-                  command=_yes, cursor="hand2").pack(side=tk.RIGHT, padx=2)
-        tk.Button(bar, text=" No ", font=(config.BUTTON_FONT[0], 8, "bold"),
-                  bg=T["shadow_dark"], fg="#FFFFFF", relief=tk.FLAT, bd=0,
-                  command=_no, cursor="hand2").pack(side=tk.RIGHT, padx=2)
+        no_btn = self._neu_btn(btn_frame, "No", command=_no, kind="mode", width=12, height=2)
+        no_btn.pack(side=tk.LEFT, padx=10)
+        yes_btn = self._neu_btn(btn_frame, "Yes", command=_yes, kind="danger", width=12, height=2)
+        yes_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Setup dialog tracking for keypad
+        self._confirm_dialog_open = True
+        self._confirm_widgets = [no_btn, yes_btn]
+        
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._confirm_dialog_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        
+        # Auto-focus the 'No' button initially for safety
+        self.root.after(100, lambda: no_btn.focus_set())
 
     def create_widgets(self):
         """Create main UI components"""
@@ -3975,6 +3991,26 @@ class DigiCalGUI:
                     nxt_idx = (curr_idx + 1) % len(tabs) if action == "dir_right" else (curr_idx - 1) % len(tabs)
                     nb.select(tabs[nxt_idx])
                 return
+
+        # ── CONFIRM DIALOG OVERRIDE ─────────────────────────────────────────
+        if getattr(self, '_confirm_dialog_open', False) and hasattr(self, '_confirm_widgets'):
+            widgets = [w for w in self._confirm_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused)
+                except ValueError:
+                    widgets[0].focus_set()
+                    return
+                if action in ("dir_right", "dir_down"):
+                    widgets[(curr_idx + 1) % len(widgets)].focus_set()
+                    return
+                elif action in ("dir_left", "dir_up"):
+                    widgets[(curr_idx - 1) % len(widgets)].focus_set()
+                    return
+                elif action == "equals":
+                    if focused.winfo_class() in ("Button", "TButton"):
+                        focused.invoke()
+                    return
 
         # ── SETTLE DUE OVERLAY OVERRIDE ─────────────────────────────────────────
         # Must be BEFORE Customers mode check (mode is still "customers" while overlay is open)
