@@ -1534,6 +1534,7 @@ class DigiCalGUI:
     def _show_app_launcher(self):
         """Full-window App Launcher grid — ESC / close button closes it."""
         T = self.T
+        c_var = "none" if getattr(self, 'hide_cursor', False) else "hand2"
         ov = tk.Frame(self.root, bg=T["bg_dark"])
         ov.place(x=0, y=0, relwidth=1, relheight=1)
         ov.lift()
@@ -1564,7 +1565,7 @@ class DigiCalGUI:
         tk.Button(hdr, text="\u2715",
                   font=(config.BUTTON_FONT[0], 10, "bold"),
                   bg=T["hdr_bg"], fg=T["subtext"],
-                  relief=tk.FLAT, bd=0, cursor="hand2",
+                  relief=tk.FLAT, bd=0, cursor=c_var,
                   activebackground=T["shadow_dark"],
                   command=_close).pack(side=tk.RIGHT, padx=8)
         self.root.bind("<Escape>", _close)
@@ -1613,10 +1614,10 @@ class DigiCalGUI:
             grid.rowconfigure(row, weight=1)
             hi = tk.Frame(shadow, bg=card_hi)
             hi.pack(fill=tk.BOTH, expand=True, padx=(0, 1), pady=(0, 1))
-            cell = tk.Frame(hi, bg=card_bg, cursor="hand2")
+            cell = tk.Frame(hi, bg=card_bg, cursor=c_var)
             cell.pack(fill=tk.BOTH, expand=True, padx=(1, 0), pady=(1, 0))
 
-            c_frame = tk.Frame(cell, bg=card_bg, cursor="hand2")
+            c_frame = tk.Frame(cell, bg=card_bg, cursor=c_var)
             c_frame.pack(expand=True)
 
             def _enter(e=None, f=cell, c=c_frame):
@@ -1634,7 +1635,7 @@ class DigiCalGUI:
             cell.bind("<Enter>", _enter)
             cell.bind("<Leave>", _leave)
 
-            lbl_icon = tk.Label(c_frame, bg=card_bg, cursor="hand2")
+            lbl_icon = tk.Label(c_frame, bg=card_bg, cursor=c_var)
             if self._launcher_icons.get(mode):
                 lbl_icon.config(image=self._launcher_icons[mode])
             else:
@@ -1642,7 +1643,7 @@ class DigiCalGUI:
             lbl_icon.pack(pady=(0, 6))
             lbl_name = tk.Label(c_frame, text=label,
                                 font=(config.BUTTON_FONT[0], 13, "bold"),
-                                bg=card_bg, fg=T["text"], cursor="hand2")
+                                bg=card_bg, fg=T["text"], cursor=c_var)
             lbl_name.pack()
             m = mode
             for w in (cell, c_frame, lbl_icon, lbl_name, hi, shadow):
