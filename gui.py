@@ -382,7 +382,7 @@ class DigiCalGUI:
             bg=bg, fg=fg,
             activebackground=abg, activeforeground=fg,
             relief=tk.FLAT, bd=0, cursor="hand2",
-            highlightthickness=1,
+            highlightthickness=3,
             highlightbackground=T["shadow_dark"],
             highlightcolor="red",
             **kw
@@ -482,7 +482,7 @@ class DigiCalGUI:
             bg=T["mode_bg"], fg=T["mode_fg"],
             relief=tk.FLAT, bd=0, cursor="hand2",
             activebackground=T["shadow_dark"],
-            highlightthickness=1, highlightbackground=T["shadow_dark"],
+            highlightthickness=3, highlightbackground=T["shadow_dark"],
             command=self._show_app_launcher
         ).pack(side=tk.LEFT, padx=(4, 2))
 
@@ -784,7 +784,7 @@ class DigiCalGUI:
         amount_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                                 bg=T["entry_bg"], fg=T["entry_fg"],
                                 insertbackground=T["text"], relief=tk.FLAT,
-                                highlightthickness=1, highlightbackground=T["shadow_dark"])
+                                highlightthickness=3, highlightbackground=T["shadow_dark"])
         amount_entry.grid(row=0, column=1, pady=5, padx=10)
 
         tk.Label(form_frame, text=self.tr("Category:"), font=config.LABEL_FONT,
@@ -804,7 +804,7 @@ class DigiCalGUI:
         desc_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                               bg=T["entry_bg"], fg=T["entry_fg"],
                               insertbackground=T["text"], relief=tk.FLAT,
-                              highlightthickness=1, highlightbackground=T["shadow_dark"])
+                              highlightthickness=3, highlightbackground=T["shadow_dark"])
         desc_entry.grid(row=2, column=1, pady=5, padx=10)
 
         tk.Label(form_frame, text=self.tr("Payment:"), font=config.LABEL_FONT,
@@ -879,7 +879,7 @@ class DigiCalGUI:
         amount_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                                 bg=T["entry_bg"], fg=T["entry_fg"],
                                 insertbackground=T["text"], relief=tk.FLAT,
-                                highlightthickness=1, highlightbackground=T["shadow_dark"])
+                                highlightthickness=3, highlightbackground=T["shadow_dark"])
         amount_entry.grid(row=0, column=1, pady=5, padx=10)
 
         tk.Label(form_frame, text=self.tr("Category:"), font=config.LABEL_FONT,
@@ -899,7 +899,7 @@ class DigiCalGUI:
         desc_entry = tk.Entry(form_frame, font=config.LABEL_FONT, width=20,
                               bg=T["entry_bg"], fg=T["entry_fg"],
                               insertbackground=T["text"], relief=tk.FLAT,
-                              highlightthickness=1, highlightbackground=T["shadow_dark"])
+                              highlightthickness=3, highlightbackground=T["shadow_dark"])
         desc_entry.grid(row=2, column=1, pady=5, padx=10)
 
         tk.Label(form_frame, text=self.tr("Payment:"), font=config.LABEL_FONT,
@@ -1715,7 +1715,7 @@ class DigiCalGUI:
             return tk.Entry(parent, textvariable=var, font=config.LABEL_FONT,
                             bg=T["entry_bg"], fg=T["entry_fg"],
                             insertbackground=T["text"], relief=tk.FLAT,
-                            highlightthickness=1, highlightbackground=T["shadow_dark"],
+                            highlightthickness=3, highlightbackground=T["shadow_dark"],
                             width=width, **kw)
 
         def row_label(parent, text, row, col=0):
@@ -3000,7 +3000,7 @@ class DigiCalGUI:
             e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22,
                          bg=T["entry_bg"], fg=T["entry_fg"],
                          insertbackground=T["text"], relief=tk.FLAT,
-                         highlightthickness=1, highlightbackground=T["shadow_dark"])
+                         highlightthickness=3, highlightbackground=T["shadow_dark"])
             e.grid(row=row, column=1, pady=3, padx=6)
             if init_val is not None:
                 e.insert(0, str(init_val))
@@ -3044,7 +3044,7 @@ class DigiCalGUI:
             e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22,
                          bg=T["entry_bg"], fg=T["entry_fg"],
                          insertbackground=T["text"], relief=tk.FLAT,
-                         highlightthickness=1, highlightbackground=T["shadow_dark"])
+                         highlightthickness=3, highlightbackground=T["shadow_dark"])
             e.grid(row=row, column=1, pady=3, padx=6)
             if init_val is not None:
                 e.insert(0, str(init_val))
@@ -3061,7 +3061,7 @@ class DigiCalGUI:
                            validate="key", validatecommand=vcmd,
                            bg=T["entry_bg"], fg=T["entry_fg"],
                            insertbackground=T["text"], relief=tk.FLAT,
-                           highlightthickness=1, highlightbackground=T["shadow_dark"])
+                           highlightthickness=3, highlightbackground=T["shadow_dark"])
         phone_e.grid(row=1, column=1, pady=3, padx=6)
         phone_e.t9_mode = "num"
 
@@ -3209,7 +3209,7 @@ class DigiCalGUI:
             e = tk.Entry(parent, font=config.LABEL_FONT, width=width,
                          bg=T["entry_bg"], fg=T["entry_fg"],
                          insertbackground=T["text"], relief=tk.FLAT,
-                         highlightthickness=1, highlightbackground=T["shadow_dark"])
+                         highlightthickness=3, highlightbackground=T["shadow_dark"])
             e.grid(row=row, column=1, pady=3, padx=6)
             return e
 
@@ -3454,7 +3454,7 @@ class DigiCalGUI:
         form_frame.pack(padx=6, fill=tk.X)
 
         tk.Label(form_frame, text=self.tr("Name *:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]).grid(row=0, column=0, sticky=tk.W, pady=3, padx=6)
-        name_e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22, bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"], relief=tk.FLAT, highlightthickness=1, highlightbackground=T["shadow_dark"])
+        name_e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22, bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"], relief=tk.FLAT, highlightthickness=3, highlightbackground=T["shadow_dark"])
         name_e.grid(row=0, column=1, pady=3, padx=6)
         name_e.insert(0, name)
 
@@ -3466,7 +3466,7 @@ class DigiCalGUI:
         inc_lbl = tk.Label(form_frame, text="", font=config.LABEL_FONT, bg=T["bg"], fg=T["text"])
         inc_lbl.grid(row=2, column=0, sticky=tk.W, pady=3, padx=6)
         
-        inc_e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22, bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"], relief=tk.FLAT, highlightthickness=1, highlightbackground=T["shadow_dark"])
+        inc_e = tk.Entry(form_frame, font=config.LABEL_FONT, width=22, bg=T["entry_bg"], fg=T["entry_fg"], insertbackground=T["text"], relief=tk.FLAT, highlightthickness=3, highlightbackground=T["shadow_dark"])
         inc_e.grid(row=2, column=1, pady=3, padx=6)
         inc_e.insert(0, f"{inc_pct:g}")
         
