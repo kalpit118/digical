@@ -1020,52 +1020,66 @@ class DigiCalGUI:
         trans_frame = tk.Frame(notebook, bg=T["bg"])
         notebook.add(trans_frame, text=self.tr("Transactions"))
         
-        # Compact column layout fitting 720px wide display (minus scrollbar ~15px = 705px usable)
-        # Date(MM-DD HH:MM)=82, Type=42, ₹Amt=72, Category=200, Via=52, By=85  → total=533+padding fits
-        trans_cols = ("Date", "Type", "₹ Amt", "Category", "Via", "By")
+        # All columns stretch proportionally — widths act as relative weights.
+        # Total= 590, distributed across ~694px usable → each scales ~1.18×
+        # Date≈118, Type≈71, Amt≈83, Category≈236, Via≈71, By≈107 (balanced)
+        trans_cols = ("Date", "Type", "Amt", "Category", "Via", "By")
         trans_tree = ttk.Treeview(trans_frame, columns=trans_cols, show="headings", height=15)
         
         col_config = {
-            "Date":     (82,  tk.W),
-            "Type":     (42,  tk.CENTER),
-            "₹ Amt":    (72,  tk.E),
+            "Date":     (100, tk.W),
+            "Type":     (60,  tk.CENTER),
+            "Amt":      (70,  tk.E),
             "Category": (200, tk.W),
-            "Via":      (52,  tk.CENTER),
-            "By":       (85,  tk.W),
+            "Via":      (60,  tk.CENTER),
+            "By":       (90,  tk.W),
         }
         for col in trans_cols:
             w, anc = col_config[col]
             trans_tree.heading(col, text=col, anchor=anc)
-            trans_tree.column(col, width=w, minwidth=w, anchor=anc, stretch=(col == "Category"))
+            trans_tree.column(col, width=w, minwidth=w, anchor=anc, stretch=True)
             
         trans_tree.tag_configure("odd", background=T.get("tree_odd", "#34495E"), foreground=T.get("tree_fg", "white"))
         trans_tree.tag_configure("even", background=T.get("tree_even", "#2C3E50"), foreground=T.get("tree_fg", "white"))
-        trans_tree.tag_configure("sales_tag", foreground="#2ECC71")
         
         trans_sb = ttk.Scrollbar(trans_frame, orient=tk.VERTICAL, command=trans_tree.yview)
         trans_tree.configure(yscrollcommand=trans_sb.set)
         trans_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5,0), pady=5)
         trans_sb.pack(side=tk.RIGHT, fill=tk.Y, padx=(0,5), pady=5)
         
+        def _fmt_amount(val):
+            """Show 120 for whole numbers, 120.5 for decimals."""
+            try:
+                f = float(val)
+                return str(int(f)) if f == int(f) else f"{f:.2f}".rstrip('0')
+            except Exception:
+                return str(val)
+
+        def _fmt_category(cat):
+            """Abbreviate long category names: 'Product Sales' → 'Pro. Sales'."""
+            if not cat or cat == "-":
+                return "-"
+            words = cat.split()
+            if len(words) >= 2 and len(words[0]) > 4:
+                return words[0][:3] + ". " + " ".join(words[1:])
+            return cat
+        
         for i, trans in enumerate(self.history_manager.get_transaction_history()):
-            t_type = "S" if trans[1] == "sales" else "E"
-            amount = f"{trans[2]:.2f}"
-            category = trans[3] or "-"
+            t_type = "Sale" if trans[1] == "sales" else "Expe"
+            amount  = _fmt_amount(trans[2])
+            category = _fmt_category(trans[3] or "-")
             raw_date = trans[5] if len(trans) > 5 else "-"
-            # Compact date: "04-09 14:32" from "2026-04-09 14:32:00"
+            # Format date as dd/mm/yy
             try:
                 from datetime import datetime as _dt
-                dt = _dt.strptime(raw_date[:16], "%Y-%m-%d %H:%M")
-                short_date = dt.strftime("%m-%d %H:%M")
+                dt = _dt.strptime(raw_date[:10], "%Y-%m-%d")
+                short_date = dt.strftime("%d/%m/%y")
             except Exception:
-                short_date = str(raw_date)[:11]
+                short_date = str(raw_date)[:8]
             payment_method = trans[7] if len(trans) > 7 and trans[7] else "Cash"
-            # Abbreviate payment method
-            method_abbrev = {"Cash": "Cash", "UPI": "UPI", "Card": "Card", "Due": "Due",
-                             "Net Banking": "Net", "Cheque": "Chq"}.get(payment_method, payment_method[:4])
-            handler_name = trans[9] if len(trans) > 9 and trans[9] else "-"
+            handler_name = (trans[9] if len(trans) > 9 and trans[9] else "-")
             tag = "even" if i % 2 == 0 else "odd"
-            trans_tree.insert("", tk.END, values=(short_date, t_type, amount, category, method_abbrev, handler_name), tags=(tag,))
+            trans_tree.insert("", tk.END, values=(short_date, t_type, amount, category, payment_method, handler_name), tags=(tag,))
 
         def _on_tab_change(e):
             sel = notebook.select()
