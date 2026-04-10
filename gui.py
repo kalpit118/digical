@@ -3267,7 +3267,7 @@ class DigiCalGUI:
             lqty_e.insert(0, str(lqty))
             price_e.insert(0, str(price))
         
-        return {"name": name_e, "cat": cat_var, "tqty": tqty_e, "lqty": lqty_e, "price": price_e}
+        return {"name": name_e, "cat": cat_var, "cat_cb": cat_cb, "tqty": tqty_e, "lqty": lqty_e, "price": price_e}
     
     def _product_form_values(self, fields):
         """Validate and extract values from the form. Returns tuple or None on error."""
@@ -3316,10 +3316,18 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
-        self._neu_btn(bf, self.tr("Save"), command=_save, kind="equals",
-                     width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
-                     width=10, height=2).pack(side=tk.LEFT, padx=5)
+        save_btn = self._neu_btn(bf, self.tr("Save"), command=_save, kind="equals", width=10, height=2)
+        save_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn = self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode", width=10, height=2)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+
+        self._product_dialog_open = True
+        self._product_dialog_widgets = [fields["name"], fields["cat_cb"], fields["tqty"], fields["lqty"], fields["price"], save_btn, cancel_btn]
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._product_dialog_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        self.root.after(100, lambda: fields["name"].focus_set())
 
     # ---- Modify dialog -----------------------------------------------------
     def _product_modify_dialog(self, row_values, reload_cb):
@@ -3351,10 +3359,18 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
-        self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals",
-                     width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
-                     width=10, height=2).pack(side=tk.LEFT, padx=5)
+        upd_btn = self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals", width=10, height=2)
+        upd_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn = self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode", width=10, height=2)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+
+        self._product_dialog_open = True
+        self._product_dialog_widgets = [fields["name"], fields["cat_cb"], fields["tqty"], fields["lqty"], fields["price"], upd_btn, cancel_btn]
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._product_dialog_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        self.root.after(100, lambda: fields["name"].focus_set())
 
     # ---- Delete ------------------------------------------------------------
     def _product_delete(self, row_values, reload_cb):
@@ -4011,6 +4027,53 @@ class DigiCalGUI:
                     if focused.winfo_class() in ("Button", "TButton"):
                         focused.invoke()
                     return
+
+        # ── PRODUCT DIALOG OVERRIDE (Create/Modify) ─────────────────────────
+        if getattr(self, '_product_dialog_open', False) and hasattr(self, '_product_dialog_widgets'):
+            widgets = [w for w in self._product_dialog_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused)
+                except ValueError:
+                    widgets[0].focus_set()
+                    return
+
+                cb_open = False
+                is_cb = (focused.winfo_class() == 'TCombobox')
+                if is_cb:
+                    try:
+                        pd = self.root.tk.call('ttk::combobox::PopdownWindow', focused)
+                        cb_open = self.root.tk.boolean(self.root.tk.call('winfo', 'ismapped', pd))
+                    except Exception:
+                        pass
+
+                if cb_open:
+                    lb = f"{pd}.f.l"
+                    if action in ("dir_up", "dir_down"):
+                        key = "<Up>" if action == "dir_up" else "<Down>"
+                        self.root.tk.call('event', 'generate', lb, key)
+                        return
+                    elif action == "dir_right":
+                        self.root.tk.call('event', 'generate', lb, '<Return>')
+                        return
+                    elif action == "dir_left":
+                        self.root.tk.call('event', 'generate', lb, '<Escape>')
+                        return
+                else:
+                    if is_cb and action == "dir_right":
+                        focused.event_generate('<Down>')
+                        return
+
+                    if action in ("dir_down", "dir_right"):
+                        widgets[(curr_idx + 1) % len(widgets)].focus_set()
+                        return
+                    elif action in ("dir_up", "dir_left"):
+                        widgets[(curr_idx - 1) % len(widgets)].focus_set()
+                        return
+                    elif action == "equals":
+                        if focused.winfo_class() in ("Button", "TButton"):
+                            focused.invoke()
+                        return
 
         # ── SETTLE DUE OVERLAY OVERRIDE ─────────────────────────────────────────
         # Must be BEFORE Customers mode check (mode is still "customers" while overlay is open)
