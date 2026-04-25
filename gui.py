@@ -777,11 +777,20 @@ class DigiCalGUI:
             try:
                 expr = self.calculator.get_expression()
                 if expr == "0" or not expr or "Error" in expr: return
-                value = float(self.calculator.evaluate() or 0)
+                
+                live_val = self._evaluate_live(expr)
+                if live_val is None or "Error" in live_val: return
+                
+                value = float(live_val)
                 rate = getattr(self, 'current_gst_rate', 18)
                 tax_amount = value * (rate / 100)
                 tax_str = f"{tax_amount:.2f}".rstrip('0').rstrip('.')
                 if tax_str == "": tax_str = "0"
+                
+                if expr[-1] in "+-×÷":
+                    self.calculator.clear_entry()
+                    expr = self.calculator.get_expression()
+                    
                 lines_before = len(self._parse_expression_to_receipt(expr))
                 
                 self.calculator.add_operator('+')
@@ -800,13 +809,22 @@ class DigiCalGUI:
             try:
                 expr = self.calculator.get_expression()
                 if expr == "0" or not expr or "Error" in expr: return
-                value = float(self.calculator.evaluate() or 0)
+                
+                live_val = self._evaluate_live(expr)
+                if live_val is None or "Error" in live_val: return
+                
+                value = float(live_val)
                 rate = getattr(self, 'current_gst_rate', 18)
                 
                 base_value = value / (1 + (rate / 100))
                 tax_amount = value - base_value
                 tax_str = f"{tax_amount:.2f}".rstrip('0').rstrip('.')
                 if tax_str == "": tax_str = "0"
+                
+                if expr[-1] in "+-×÷":
+                    self.calculator.clear_entry()
+                    expr = self.calculator.get_expression()
+                    
                 lines_before = len(self._parse_expression_to_receipt(expr))
                 
                 self.calculator.add_operator('-')
