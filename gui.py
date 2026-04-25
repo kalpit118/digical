@@ -3344,6 +3344,32 @@ class DigiCalGUI:
         price_e = entry(4)
         price_e.t9_mode = "num"
         
+        lbl(5, self.tr("Incl. GST %:"))
+        gst_e = entry(5)
+        gst_e.t9_mode = "num"
+        
+        lbl(6, self.tr("Net Price (₹):"))
+        net_var = tk.StringVar()
+        net_e = tk.Entry(parent, textvariable=net_var, font=config.LABEL_FONT, width=22,
+                         bg=T["bg"], fg=T["success"], disabledbackground=T["bg"], disabledforeground=T["success"],
+                         relief=tk.FLAT, state="disabled", highlightthickness=0)
+        net_e.grid(row=6, column=1, pady=3, padx=6)
+        
+        def _update_net_price(event=None):
+            try:
+                p = float(price_e.get().strip() or 0)
+                g = float(gst_e.get().strip() or 0)
+                if p > 0 and g >= 0:
+                    net = p / (1 + (g / 100))
+                    net_var.set(f"{net:.2f}")
+                else:
+                    net_var.set("")
+            except ValueError:
+                net_var.set("")
+                
+        price_e.bind("<KeyRelease>", _update_net_price)
+        gst_e.bind("<KeyRelease>", _update_net_price)
+        
         # Auto-fill left_qty when total_qty changes (only if left_qty is empty)
         def _sync_left(e):
             if not lqty_e.get().strip():
@@ -3359,8 +3385,9 @@ class DigiCalGUI:
             tqty_e.insert(0, str(tqty))
             lqty_e.insert(0, str(lqty))
             price_e.insert(0, str(price))
+            _update_net_price()
         
-        return {"name": name_e, "cat": cat_var, "cat_cb": cat_cb, "tqty": tqty_e, "lqty": lqty_e, "price": price_e}
+        return {"name": name_e, "cat": cat_var, "cat_cb": cat_cb, "tqty": tqty_e, "lqty": lqty_e, "price": price_e, "gst": gst_e}
     
     def _product_form_values(self, fields):
         """Validate and extract values from the form. Returns tuple or None on error."""
@@ -3415,7 +3442,7 @@ class DigiCalGUI:
         cancel_btn.pack(side=tk.LEFT, padx=5)
 
         self._product_dialog_open = True
-        self._product_dialog_widgets = [fields["name"], fields["cat_cb"], fields["tqty"], fields["lqty"], fields["price"], save_btn, cancel_btn]
+        self._product_dialog_widgets = [fields["name"], fields["cat_cb"], fields["tqty"], fields["lqty"], fields["price"], fields["gst"], save_btn, cancel_btn]
         def _on_destroy(e):
             if e.widget == ov:
                 self._product_dialog_open = False
@@ -3458,7 +3485,7 @@ class DigiCalGUI:
         cancel_btn.pack(side=tk.LEFT, padx=5)
 
         self._product_dialog_open = True
-        self._product_dialog_widgets = [fields["name"], fields["cat_cb"], fields["tqty"], fields["lqty"], fields["price"], upd_btn, cancel_btn]
+        self._product_dialog_widgets = [fields["name"], fields["cat_cb"], fields["tqty"], fields["lqty"], fields["price"], fields["gst"], upd_btn, cancel_btn]
         def _on_destroy(e):
             if e.widget == ov:
                 self._product_dialog_open = False
