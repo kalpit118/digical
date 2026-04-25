@@ -179,6 +179,7 @@ class DigiCalGUI:
         settings = self._load_settings()
         self.dark_mode: bool = settings.get("dark_mode", False)
         self.language = settings.get("language", "en")
+        self.current_gst_rate = settings.get("gst_rate", 18.0)
         
         # Fullscreen initialization
         self.fullscreen: bool = settings.get("fullscreen", False)
@@ -770,22 +771,31 @@ class DigiCalGUI:
             self.calculator.clear_memory()
             self._show_toast(self.tr("Memory cleared"))
         elif button == 'MR':
-            mem_value = self.calculator.recall_memory()
-            self.calculator.set_expression(mem_value)
-            self.update_display(mem_value)
+            self.show_gst_rate_dialog()
         elif button == 'M+':
             try:
-                value = float(self.display.cget("text"))
-                self.calculator.add_to_memory(value)
-                self._show_toast(self.tr("Added {} to memory").format(value))
-            except:
+                val = self.calculator.evaluate()
+                if val and not val.startswith("Error"):
+                    base_val = float(val)
+                    gst_amt = base_val * (self.current_gst_rate / 100.0)
+                    new_val = base_val + gst_amt
+                    new_val_str = f"{int(new_val)}" if new_val.is_integer() else f"{new_val:.2f}"
+                    self.calculator.set_expression(new_val_str)
+                    self.update_display(new_val_str)
+                    self._show_toast(self.tr("Added {}% GST").format(self.current_gst_rate))
+            except Exception:
                 pass
         elif button == 'M-':
             try:
-                value = float(self.display.cget("text"))
-                self.calculator.subtract_from_memory(value)
-                self._show_toast(self.tr("Subtracted {} from memory").format(value))
-            except:
+                val = self.calculator.evaluate()
+                if val and not val.startswith("Error"):
+                    gross_val = float(val)
+                    net_val = gross_val / (1 + (self.current_gst_rate / 100.0))
+                    net_val_str = f"{int(net_val)}" if net_val.is_integer() else f"{net_val:.2f}"
+                    self.calculator.set_expression(net_val_str)
+                    self.update_display(net_val_str)
+                    self._show_toast(self.tr("Removed {}% GST").format(self.current_gst_rate))
+            except Exception:
                 pass
 
 
@@ -1547,6 +1557,49 @@ class DigiCalGUI:
         body = tk.Frame(ov, bg=T["bg"])
         body.pack(fill=tk.BOTH, expand=True, padx=12, pady=8)
         return ov, body, _close
+
+    def show_gst_rate_dialog(self):
+        """Show overlay to select GST Rate"""
+        T = self.T
+        ov, body, close_cb = self._open_overlay(self.tr("Select GST Rate"))
+        self._gst_rate_dialog_open = True
+        
+        rates = [0.0, 5.0, 12.0, 18.0, 28.0]
+        
+        container = tk.Frame(body, bg=T["bg"])
+        container.pack(expand=True)
+        
+        tk.Label(container, text=self.tr("Current GST Rate: {}%").format(self.current_gst_rate),
+                 font=(config.BUTTON_FONT[0], 16, "bold"), bg=T["bg"], fg=T["accent"]).pack(pady=(0, 20))
+                 
+        self._gst_rate_widgets = []
+        
+        def make_setter(r):
+            def _set():
+                self.current_gst_rate = r
+                self._save_settings({"gst_rate": self.current_gst_rate})
+                self._show_toast(self.tr("GST set to {}%").format(r))
+                close_cb()
+            return _set
+            
+        for r in rates:
+            kind = "equals" if r == self.current_gst_rate else "mode"
+            btn = self._neu_btn(container, f"{r}%", command=make_setter(r), kind=kind, width=15, height=2)
+            btn.pack(pady=5)
+            self._gst_rate_widgets.append(btn)
+            
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._gst_rate_dialog_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        
+        # Focus the current rate button
+        try:
+            idx = rates.index(self.current_gst_rate)
+        except ValueError:
+            idx = 3 # 18.0% default
+        self.root.after(100, lambda: self._gst_rate_widgets[idx].focus_set())
+
 
     # ── App Launcher ────────────────────────────────────────────────────────
     def _show_app_launcher(self):
@@ -4077,6 +4130,26 @@ class DigiCalGUI:
                         if focused.winfo_class() in ("Button", "TButton"):
                             focused.invoke()
                         return
+
+        # ── GST RATE DIALOG OVERRIDE ─────────────────────────────────────────
+        if getattr(self, '_gst_rate_dialog_open', False) and hasattr(self, '_gst_rate_widgets'):
+            widgets = [w for w in self._gst_rate_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused)
+                except ValueError:
+                    widgets[0].focus_set()
+                    return
+                if action in ("dir_down", "dir_right"):
+                    widgets[(curr_idx + 1) % len(widgets)].focus_set()
+                    return
+                elif action in ("dir_up", "dir_left"):
+                    widgets[(curr_idx - 1) % len(widgets)].focus_set()
+                    return
+                elif action == "equals":
+                    if focused.winfo_class() in ("Button", "TButton"):
+                        focused.invoke()
+                    return
 
         # ── SETTLE DUE OVERLAY OVERRIDE ─────────────────────────────────────────
         # Must be BEFORE Customers mode check (mode is still "customers" while overlay is open)
