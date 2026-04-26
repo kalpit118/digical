@@ -3335,8 +3335,9 @@ class DigiCalGUI:
             tk.Label(parent, text=text, font=config.LABEL_FONT,
                      bg=T["bg"], fg=T["text"]).grid(row=row, column=0, sticky=tk.W, pady=3, padx=6)
 
-        def entry(row, width=22):
+        def entry(row, width=22, textvariable=None):
             e = tk.Entry(parent, font=config.LABEL_FONT, width=width,
+                         textvariable=textvariable,
                          bg=T["entry_bg"], fg=T["entry_fg"],
                          insertbackground=T["text"], relief=tk.FLAT,
                          highlightthickness=3, highlightbackground=T["shadow_dark"])
@@ -3361,22 +3362,7 @@ class DigiCalGUI:
         lqty_e = entry(3)
         lqty_e.t9_mode = "num"
 
-        lbl(4, self.tr("Price (₹) *:"))
-        price_e = entry(4)
-        price_e.t9_mode = "num"
-        
-        lbl(5, self.tr("Incl. GST %:"))
-        gst_e = entry(5)
-        gst_e.t9_mode = "num"
-        
-        lbl(6, self.tr("Net Price (₹):"))
-        net_var = tk.StringVar()
-        net_e = tk.Entry(parent, textvariable=net_var, font=config.LABEL_FONT, width=22,
-                         bg=T["bg"], fg=T["success"], disabledbackground=T["bg"], disabledforeground=T["success"],
-                         relief=tk.FLAT, state="disabled", highlightthickness=0)
-        net_e.grid(row=6, column=1, pady=3, padx=6)
-        
-        def _update_net_price(event=None):
+        def _update_net_price(*args):
             try:
                 p = float(price_e.get().strip() or 0)
                 g = float(gst_e.get().strip() or 0)
@@ -3388,8 +3374,24 @@ class DigiCalGUI:
             except ValueError:
                 net_var.set("")
                 
-        price_e.bind("<KeyRelease>", _update_net_price)
-        gst_e.bind("<KeyRelease>", _update_net_price)
+        price_var = tk.StringVar()
+        price_var.trace("w", _update_net_price)
+        lbl(4, self.tr("Price (₹) *:"))
+        price_e = entry(4, textvariable=price_var)
+        price_e.t9_mode = "num"
+        
+        gst_var = tk.StringVar()
+        gst_var.trace("w", _update_net_price)
+        lbl(5, self.tr("Incl. GST %:"))
+        gst_e = entry(5, textvariable=gst_var)
+        gst_e.t9_mode = "num"
+        
+        lbl(6, self.tr("Net Price (₹):"))
+        net_var = tk.StringVar()
+        net_e = tk.Entry(parent, textvariable=net_var, font=config.LABEL_FONT, width=22,
+                         bg=T["bg"], fg=T["success"], disabledbackground=T["bg"], disabledforeground=T["success"],
+                         relief=tk.FLAT, state="disabled", highlightthickness=0)
+        net_e.grid(row=6, column=1, pady=3, padx=6)
         
         # Auto-fill left_qty when total_qty changes (only if left_qty is empty)
         def _sync_left(e):
