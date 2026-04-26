@@ -4522,9 +4522,10 @@ class DigiCalGUI:
         if f1_func == "memory":
             if self.current_mode == "calculator":
                 expr = self.calculator.get_expression()
+                display_text = self.display.cget("text")
                 
-                # Check for empty / zero to clear
-                if not expr or expr == "0":
+                # Check for empty / zero on display to clear memory
+                if display_text == "0":
                     self._f1_memory_value = None
                     self.system_panel.hide_memory()
                     self._show_toast(self.tr("Memory Cleared"))
@@ -4534,20 +4535,26 @@ class DigiCalGUI:
                 if any(expr.endswith(op) for op in ("+", "-", "×", "÷", "%")):
                     if self._f1_memory_value is not None:
                         val_str = f"{self._f1_memory_value:g}"
-                        self.calculator_button_click(val_str)
+                        if self.calculator.get_expression() in ("0", ""):
+                            self._line_products = {}
+                        self.calculator.add_digit(val_str)
+                        self.update_display(self.calculator.get_expression())
                         self._show_toast(self.tr("Memory Recalled: {}").format(val_str))
                     else:
                         self._show_toast(self.tr("Memory is empty"), kind="warning")
                     return
                 
-                # Otherwise, it ends with a digit/result, so we Store
+                # Otherwise, try to store the currently displayed number or the live evaluation
                 try:
-                    res_str = self._evaluate_live(expr)
-                    if res_str:
-                        val = float(res_str)
-                        self._f1_memory_value = val
-                        self.system_panel.show_memory()
-                        self._show_toast(self.tr("Stored in Memory: {}").format(f"{val:g}"))
+                    to_eval = expr if (expr and expr != "0") else display_text
+                    res_str = self._evaluate_live(to_eval)
+                    if not res_str:
+                        res_str = to_eval
+                    
+                    val = float(res_str)
+                    self._f1_memory_value = val
+                    self.system_panel.show_memory()
+                    self._show_toast(self.tr("Stored in Memory: {}").format(f"{val:g}"))
                 except Exception:
                     self._show_toast(self.tr("Invalid expression to store"), kind="error")
             return
