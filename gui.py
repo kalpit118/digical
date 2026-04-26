@@ -2657,14 +2657,9 @@ class DigiCalGUI:
 
         tk.Label(ff, text=self.tr("Incentive Type:"), font=config.LABEL_FONT, bg=T["bg"], fg=T["text"]
                  ).grid(row=1, column=0, sticky=tk.W, pady=8, padx=8)
-        incentive_type_var = tk.StringVar(value="percentage")
-        tf = tk.Frame(ff, bg=T["bg"])
-        tf.grid(row=1, column=1, pady=8, padx=8, sticky=tk.W)
-        for txt, val in [(self.tr("% Percent"), "percentage"), (self.tr("Fixed ₹"), "fixed")]:
-            tk.Radiobutton(tf, text=txt, variable=incentive_type_var, value=val,
-                           font=config.LABEL_FONT, bg=T["bg"], fg=T["text"],
-                           selectcolor=T["mode_bg"], activebackground=T["bg"],
-                           activeforeground=T["text"]).pack(side=tk.LEFT, padx=4)
+        incentive_type_var = tk.StringVar(value=self.tr("% Percent"))
+        type_cb = ttk.Combobox(ff, textvariable=incentive_type_var, values=[self.tr("% Percent"), self.tr("Fixed ₹")], font=config.LABEL_FONT, width=20, state="readonly")
+        type_cb.grid(row=1, column=1, pady=8, padx=8)
 
         incentive_label = tk.Label(ff, text=self.tr("Incentive (%):"), font=config.LABEL_FONT,
                                    bg=T["bg"], fg=T["text"])
@@ -2674,12 +2669,12 @@ class DigiCalGUI:
         incentive_entry.grid(row=2, column=1, pady=8, padx=8)
 
         def _update_lbl(*_):
-            incentive_label.config(text=self.tr("Incentive (%):") if incentive_type_var.get() == "percentage" else self.tr("Incentive (Fixed ₹):"))
+            incentive_label.config(text=self.tr("Incentive (%):") if incentive_type_var.get() == self.tr("% Percent") else self.tr("Incentive (Fixed ₹):"))
         incentive_type_var.trace_add('write', _update_lbl)
 
         def create_handler():
             name = name_entry.get().strip()
-            itype = incentive_type_var.get()
+            itype = "percentage" if incentive_type_var.get() == self.tr("% Percent") else "fixed"
             if not name:
                 self._show_toast(self.tr("Please enter a handler name"), kind="error"); return
             try:
@@ -2699,10 +2694,20 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=12)
-        self._neu_btn(bf, self.tr("Create"), command=create_handler, kind="equals",
-                      width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
-                      width=10, height=2).pack(side=tk.LEFT, padx=5)
+        create_btn = self._neu_btn(bf, self.tr("Create"), command=create_handler, kind="equals",
+                      width=10, height=2)
+        create_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn = self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode",
+                      width=10, height=2)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+
+        self._product_dialog_open = True
+        self._product_dialog_widgets = [name_entry, type_cb, incentive_entry, create_btn, cancel_btn]
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._product_dialog_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        self.root.after(100, lambda: name_entry.focus_set())
 
     def show_due_customer_dialog(self, on_confirm, on_cancel=None):
         """Full-window overlay to link a Due payment to an existing or new customer."""
@@ -3694,8 +3699,18 @@ class DigiCalGUI:
 
         bf = tk.Frame(body, bg=T["bg"])
         bf.pack(pady=8)
-        self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals", width=10, height=2).pack(side=tk.LEFT, padx=5)
-        self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode", width=10, height=2).pack(side=tk.LEFT, padx=5)
+        update_btn = self._neu_btn(bf, self.tr("Update"), command=_update, kind="equals", width=10, height=2)
+        update_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn = self._neu_btn(bf, self.tr("Cancel"), command=close, kind="mode", width=10, height=2)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+
+        self._product_dialog_open = True
+        self._product_dialog_widgets = [name_e, type_cb, inc_e, update_btn, cancel_btn]
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._product_dialog_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        self.root.after(100, lambda: name_e.focus_set())
 
     # ---- Delete ------------------------------------------------------------
     def _handler_delete(self, row_values, reload_cb):
