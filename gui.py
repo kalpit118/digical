@@ -42,6 +42,9 @@ class SystemPanel:
                                    bg=self.T["hdr_bg"], fg=self.T["text"])
         self.time_label.pack(side=tk.RIGHT, padx=(2, 5))
 
+        self.memory_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
+        self.memory_label.pack(side=tk.RIGHT, padx=4)
+
         self.shift_label = tk.Label(self.frame, bg=self.T["hdr_bg"])
         self.shift_label.pack(side=tk.RIGHT, padx=4)
 
@@ -53,6 +56,7 @@ class SystemPanel:
         self.wifi_label.config(image=self.icons.get("wifi_off"))
         self.time_label.config(text=datetime.now().strftime("%I:%M %p •"))
         self.shift_label.config(image="")
+        self.memory_label.config(image="")
         
         self.refresh()
 
@@ -62,6 +66,13 @@ class SystemPanel:
 
     def hide_shift(self):
         self.shift_label.config(image="")
+
+    def show_memory(self):
+        if "memory" in self.icons:
+            self.memory_label.config(image=self.icons["memory"])
+
+    def hide_memory(self):
+        self.memory_label.config(image="")
 
     def _load_icons(self):
         try:
@@ -75,14 +86,15 @@ class SystemPanel:
                 "wifi_on": "wifi_on.png", "wifi_off": "wifi_off.png",
                 "bat0": "battery0.png", "bat10": "battery10.png",
                 "bat50": "battery50.png", "bat90": "battery90.png", "bat100": "battery100.png",
-                "shift": "shiftkey.png"
+                "shift": "shiftkey.png",
+                "memory": "memory.png"
             }
 
             for key, filename in icon_files.items():
                 path = os.path.join(header_assets, filename)
                 if os.path.exists(path):
                     img = Image.open(path).convert("RGBA").resize(size, _resample)
-                    if not self.is_dark and key == "shift":
+                    if not self.is_dark and key in ("shift", "memory"):
                         # Invert RGB while preserving Alpha
                         r, g, b, a = img.split()
                         rgb = Image.merge("RGB", (r, g, b))
@@ -205,6 +217,7 @@ class DigiCalGUI:
         # Current mode
         self.current_mode = "calculator"
         self.current_graph_info = None # (func_name, args, kwargs)
+        self._f1_memory_value = None
 
         # ── Keypad state ──────────────────────────────────────────────────
         # These are set/cleared by show_transaction_dialog so the keypad
@@ -2200,6 +2213,7 @@ class DigiCalGUI:
 
         f1_options = {
             "none":      self.tr("None (disabled)"),
+            "memory":    self.tr("Memory (Store/Recall)"),
             "settings":  self.tr("Settings"),
             "history":   self.tr("History"),
             "graphs":    self.tr("Graphs"),
@@ -4503,6 +4517,39 @@ class DigiCalGUI:
         f1_func = settings.get("f1_function", "none")
 
         if f1_func == "none":
+            return
+
+        if f1_func == "memory":
+            if self.current_mode == "calculator":
+                expr = self.calculator.get_expression()
+                
+                # Check for empty / zero to clear
+                if not expr or expr == "0":
+                    self._f1_memory_value = None
+                    self.system_panel.hide_memory()
+                    self._show_toast(self.tr("Memory Cleared"))
+                    return
+                
+                # If expression ends with an operator, we Recall
+                if any(expr.endswith(op) for op in ("+", "-", "×", "÷", "%")):
+                    if self._f1_memory_value is not None:
+                        val_str = f"{self._f1_memory_value:g}"
+                        self.calculator_button_click(val_str)
+                        self._show_toast(self.tr("Memory Recalled: {}").format(val_str))
+                    else:
+                        self._show_toast(self.tr("Memory is empty"), kind="warning")
+                    return
+                
+                # Otherwise, it ends with a digit/result, so we Store
+                try:
+                    res_str = self._evaluate_live(expr)
+                    if res_str:
+                        val = float(res_str)
+                        self._f1_memory_value = val
+                        self.system_panel.show_memory()
+                        self._show_toast(self.tr("Stored in Memory: {}").format(f"{val:g}"))
+                except Exception:
+                    self._show_toast(self.tr("Invalid expression to store"), kind="error")
             return
 
         # Valid mode names that can be switched to
