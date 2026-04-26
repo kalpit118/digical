@@ -94,13 +94,12 @@ class SystemPanel:
                 path = os.path.join(header_assets, filename)
                 if os.path.exists(path):
                     img = Image.open(path).convert("RGBA").resize(size, _resample)
-                    if not self.is_dark and key in ("shift", "memory"):
-                        # Invert RGB while preserving Alpha
-                        r, g, b, a = img.split()
-                        rgb = Image.merge("RGB", (r, g, b))
-                        inv_rgb = ImageOps.invert(rgb)
-                        r2, g2, b2 = inv_rgb.split()
-                        img = Image.merge("RGBA", (r2, g2, b2, a))
+                    # Force color to white (in dark mode) or black (in light mode) while preserving alpha
+                    r, g, b, a = img.split()
+                    target_color = 255 if self.is_dark else 0
+                    solid = Image.new('L', img.size, target_color)
+                    img = Image.merge("RGBA", (solid, solid, solid, a))
+                    
                     self.icons[key] = ImageTk.PhotoImage(img)
         except Exception as e:
             print(f"Error loading system icons: {e}")
