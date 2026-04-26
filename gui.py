@@ -2571,7 +2571,8 @@ class DigiCalGUI:
         # Store mapping label -> (product_id, price)
         self._product_bar_map = {}
         labels = []
-        for pid, name, cat, tqty, lqty, price in products:
+        for p in products:
+            pid, name, cat, tqty, lqty, price = p[:6]
             label = f"{name}  \u20b9{price:.2f}  [qty:{lqty:g}]"
             labels.append(label)
             self._product_bar_map[label] = (pid, price)
@@ -2629,9 +2630,10 @@ class DigiCalGUI:
         for pid, count in self._product_selection_counts.items():
             product = self.db.get_product(pid)
             if product:
-                _, name, cat, tqty, lqty, price = product
+                pid_db, name, cat, tqty, lqty, price = product[:6]
+                gst_pct = product[6] if len(product) > 6 else 0
                 new_lqty = max(0.0, lqty - count)   # clamp to 0
-                self.db.update_product(pid, name, cat, tqty, new_lqty, price)
+                self.db.update_product(pid, name, cat, tqty, new_lqty, price, gst_pct)
         self._product_selection_counts = {}  # reset after deduction
         self.refresh_product_bar()           # reflect updated qty in picker
     
@@ -3277,7 +3279,8 @@ class DigiCalGUI:
         def _load_products():
             for item in tree.get_children():
                 tree.delete(item)
-            for i, (pid, name, cat, tqty, lqty, price) in enumerate(self.db.get_products()):
+            for i, p in enumerate(self.db.get_products()):
+                pid, name, cat, tqty, lqty, price = p[:6]
                 tag = "even" if i % 2 == 0 else "odd"
                 if tqty > 0 and (lqty / tqty) < low_pct:
                     tag = tag + "_low"
