@@ -778,6 +778,12 @@ class DigiCalGUI:
                 expr = self.calculator.get_expression()
                 if expr == "0" or not expr or "Error" in expr: return
                 
+                if hasattr(self, '_line_products'):
+                    for k, v in self._line_products.items():
+                        if isinstance(v, dict) and v.get("gst", 0) > 0:
+                            self._show_toast(self.tr("GST is already included in product"), kind="error")
+                            return
+                
                 live_val = self._evaluate_live(expr)
                 if live_val is None or "Error" in live_val: return
                 
@@ -799,7 +805,7 @@ class DigiCalGUI:
                     
                 if not hasattr(self, '_line_products'):
                     self._line_products = {}
-                self._line_products[lines_before] = f"GST ({rate}%)"
+                self._line_products[lines_before] = f"GST ({rate:g}%)"
                 
                 self.update_display(self.calculator.get_expression())
                 self._show_toast(self.tr("Added {}% GST").format(rate))
@@ -810,11 +816,21 @@ class DigiCalGUI:
                 expr = self.calculator.get_expression()
                 if expr == "0" or not expr or "Error" in expr: return
                 
+                rate = None
+                if hasattr(self, '_line_products'):
+                    for k, v in self._line_products.items():
+                        if isinstance(v, dict) and v.get("gst", 0) > 0:
+                            rate = v.get("gst", 0)
+                            break
+                            
+                if rate is None:
+                    self._show_toast(self.tr("No pre-applied GST to subtract"), kind="warning")
+                    return
+                
                 live_val = self._evaluate_live(expr)
                 if live_val is None or "Error" in live_val: return
                 
                 value = float(live_val)
-                rate = getattr(self, 'current_gst_rate', 18)
                 
                 base_value = value / (1 + (rate / 100))
                 tax_amount = value - base_value
@@ -833,10 +849,10 @@ class DigiCalGUI:
                     
                 if not hasattr(self, '_line_products'):
                     self._line_products = {}
-                self._line_products[lines_before] = f"-GST Base ({rate}%)"
+                self._line_products[lines_before] = f"-GST Base ({rate:g}%)"
                 
                 self.update_display(self.calculator.get_expression())
-                self._show_toast(self.tr("Subtracted {}% GST Base").format(rate))
+                self._show_toast(self.tr("Subtracted {}% GST").format(rate))
             except Exception:
                 pass
 
@@ -1404,7 +1420,8 @@ class DigiCalGUI:
 
         font = (config.BUTTON_FONT[0], 14)
         for i, (op, val) in enumerate(lines):
-            name = self._line_products.get(i, "")
+            item = self._line_products.get(i, "")
+            name = item.get("name", "") if isinstance(item, dict) else item
             
             row = tk.Frame(inner, bg=T["display_bg"])
             row.pack(side=tk.TOP, fill=tk.X, pady=1)
@@ -2578,21 +2595,22 @@ class DigiCalGUI:
         # Inject into calculator: if expression is empty set value, else add
         expr = self.calculator.get_expression()
         
-        # Get product name for receipt log
+        # Get product name and gst for receipt log
         product = self.db.get_product(pid)
         product_name = product[1] if product else ""
+        product_gst = product[6] if product and len(product) > 6 else 0
         
         if expr == "0" or expr == "":
             self.calculator.set_expression(price_str)
             if not hasattr(self, '_line_products'): self._line_products = {}
-            self._line_products[0] = product_name
+            self._line_products[0] = {"name": product_name, "gst": product_gst}
         else:
             self.calculator.add_operator("+")
             self.calculator.add_digit(price_str)
             new_expr = self.calculator.get_expression()
             lines = self._parse_expression_to_receipt(new_expr)
             if not hasattr(self, '_line_products'): self._line_products = {}
-            self._line_products[len(lines) - 1] = product_name
+            self._line_products[len(lines) - 1] = {"name": product_name, "gst": product_gst}
             
         self.update_display(self.calculator.get_expression())
         
@@ -3378,13 +3396,19 @@ class DigiCalGUI:
         tqty_e.bind("<FocusOut>", _sync_left)
         
         if prefill:
-            name, cat, tqty, lqty, price = prefill
+            if len(prefill) == 6:
+                name, cat, tqty, lqty, price, gst = prefill
+            else:
+                name, cat, tqty, lqty, price = prefill
+                gst = 0
             name_e.insert(0, name)
             if cat in cats:
                 cat_var.set(cat)
             tqty_e.insert(0, str(tqty))
             lqty_e.insert(0, str(lqty))
             price_e.insert(0, str(price))
+            if gst > 0:
+                gst_e.insert(0, f"{gst:g}")
             _update_net_price()
         
         return {"name": name_e, "cat": cat_var, "cat_cb": cat_cb, "tqty": tqty_e, "lqty": lqty_e, "price": price_e, "gst": gst_e}
@@ -3396,6 +3420,7 @@ class DigiCalGUI:
         tqty_s = fields["tqty"].get().strip()
         lqty_s = fields["lqty"].get().strip()
         price_s = fields["price"].get().strip()
+        gst_s = fields["gst"].get().strip()
         if not name:
             self._show_toast(self.tr("Product name is required"), kind="error"); return None
         if not cat:
@@ -3404,14 +3429,15 @@ class DigiCalGUI:
             tqty = float(tqty_s)
             lqty = float(lqty_s)
             price = float(price_s)
+            gst = float(gst_s) if gst_s else 0.0
         except ValueError:
-            self._show_toast(self.tr("Qty and Price must be valid numbers"), kind="error")
+            self._show_toast(self.tr("Qty, Price, and GST must be valid numbers"), kind="error")
             return None
-        if tqty < 0 or lqty < 0 or price < 0:
+        if tqty < 0 or lqty < 0 or price < 0 or gst < 0:
             self._show_toast(self.tr("Values cannot be negative"), kind="error"); return None
         if lqty > tqty:
             self._show_toast(self.tr("Left Qty cannot exceed Total Qty"), kind="error"); return None
-        return name, cat, tqty, lqty, price
+        return name, cat, tqty, lqty, price, gst
     
     # ---- Create dialog -----------------------------------------------------
     def _product_create_dialog(self):
@@ -3427,8 +3453,8 @@ class DigiCalGUI:
         def _save():
             vals = self._product_form_values(fields)
             if vals is None: return
-            name, cat, tqty, lqty, price = vals
-            pid = self.db.add_product(name, cat, tqty, price, lqty)
+            name, cat, tqty, lqty, price, gst = vals
+            pid = self.db.add_product(name, cat, tqty, price, lqty, gst)
             self._show_toast(f"Product '{name}' added (ID {pid})")
             close()
             self.clear_content_frame()
@@ -3456,7 +3482,7 @@ class DigiCalGUI:
         product = self.db.get_product(pid)
         if not product:
             self._show_toast(self.tr("Product not found"), kind="error"); return
-        _, name, cat, tqty, lqty, price = product
+        _, name, cat, tqty, lqty, price, gst = product
 
         T = self.T
         ov, body, close = self._open_overlay(self.tr("Modify Product — ID {}").format(pid))
@@ -3465,13 +3491,13 @@ class DigiCalGUI:
                  bg=T["bg"], fg=T["accent"]).pack(pady=(8, 4))
         form_frame = tk.Frame(body, bg=T["bg"])
         form_frame.pack(padx=6, fill=tk.X)
-        fields = self._product_form(form_frame, prefill=(name, cat, tqty, lqty, price))
+        fields = self._product_form(form_frame, prefill=(name, cat, tqty, lqty, price, gst))
 
         def _update():
             vals = self._product_form_values(fields)
             if vals is None: return
-            n, c, tq, lq, pr = vals
-            self.db.update_product(pid, n, c, tq, lq, pr)
+            n, c, tq, lq, pr, g = vals
+            self.db.update_product(pid, n, c, tq, lq, pr, g)
             self._show_toast(f"Product #{pid} updated")
             close()
             self.clear_content_frame()

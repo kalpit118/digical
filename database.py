@@ -155,6 +155,13 @@ class Database:
         if 'incentive_type' not in handler_columns:
             cursor.execute('ALTER TABLE handlers ADD COLUMN incentive_type TEXT DEFAULT "percentage"')
             print("Database migrated: Added incentive_type column to handlers")
+            
+        # Migration: Add gst_pct column to products table if it doesn't exist
+        cursor.execute("PRAGMA table_info(products)")
+        product_columns = [column[1] for column in cursor.fetchall()]
+        if 'gst_pct' not in product_columns:
+            cursor.execute('ALTER TABLE products ADD COLUMN gst_pct REAL DEFAULT 0')
+            print("Database migrated: Added gst_pct column to products")
         
         conn.commit()
         conn.close()
@@ -491,7 +498,7 @@ class Database:
         conn.close()
     
     # ── Product Management Methods ──────────────────────────────────────────
-    def add_product(self, name, category, total_qty, price, left_qty=None):
+    def add_product(self, name, category, total_qty, price, left_qty=None, gst_pct=0):
         """Add a new product. left_qty defaults to total_qty."""
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if left_qty is None:
@@ -499,9 +506,9 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'INSERT INTO products (name, category, total_qty, left_qty, price, created_at, updated_at)'
-            ' VALUES (?, ?, ?, ?, ?, ?, ?)',
-            (name.strip(), category, float(total_qty), float(left_qty), float(price), now, now)
+            'INSERT INTO products (name, category, total_qty, left_qty, price, gst_pct, created_at, updated_at)'
+            ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (name.strip(), category, float(total_qty), float(left_qty), float(price), float(gst_pct), now, now)
         )
         conn.commit()
         product_id = cursor.lastrowid
@@ -513,7 +520,7 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT id, name, category, total_qty, left_qty, price FROM products ORDER BY id'
+            'SELECT id, name, category, total_qty, left_qty, price, gst_pct FROM products ORDER BY id'
         )
         rows = cursor.fetchall()
         conn.close()
@@ -524,22 +531,22 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT id, name, category, total_qty, left_qty, price FROM products WHERE id = ?',
+            'SELECT id, name, category, total_qty, left_qty, price, gst_pct FROM products WHERE id = ?',
             (product_id,)
         )
         row = cursor.fetchone()
         conn.close()
         return row
     
-    def update_product(self, product_id, name, category, total_qty, left_qty, price):
+    def update_product(self, product_id, name, category, total_qty, left_qty, price, gst_pct=0):
         """Update an existing product."""
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'UPDATE products SET name=?, category=?, total_qty=?, left_qty=?, price=?, updated_at=?'
+            'UPDATE products SET name=?, category=?, total_qty=?, left_qty=?, price=?, gst_pct=?, updated_at=?'
             ' WHERE id=?',
-            (name.strip(), category, float(total_qty), float(left_qty), float(price), now, product_id)
+            (name.strip(), category, float(total_qty), float(left_qty), float(price), float(gst_pct), now, product_id)
         )
         conn.commit()
         conn.close()
