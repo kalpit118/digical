@@ -1714,7 +1714,7 @@ class DigiCalGUI:
             (self.tr("Customers"), "customer.png", "customers"),
             (self.tr("Products"),  "product.png", "products"),
             (self.tr("Handlers"),  "handler.png", "handlers"),
-            (self.tr("Tester"),    "settings.png", "tester"),
+            (self.tr("Tester"),    "tester.png", "tester"),
             (self.tr("Settings"),  "settings.png", "settings"),
         ]
 
@@ -3769,6 +3769,8 @@ class DigiCalGUI:
     def handle_keypad_action(self, action):
         """Route a keypad action string to the appropriate GUI method.
         Called from the Keypad's on_action callback in the main thread."""
+        if getattr(self, "current_mode", None) == "tester":
+            return
         # Schedule on the Tk main thread to avoid cross-thread widget access
         self.root.after(0, self._dispatch_keypad_action, action)
 
@@ -4620,6 +4622,15 @@ class DigiCalGUI:
 
     def handle_keypad_press(self, key_name):
         if getattr(self, "current_mode", None) == "tester" and hasattr(self, "_tester_keys"):
+            if key_name == "R1C7":
+                self._tester_back_count = getattr(self, "_tester_back_count", 0) + 1
+                if self._tester_back_count >= 3:
+                    self._tester_back_count = 0
+                    self.switch_mode("calculator")
+                    return
+            else:
+                self._tester_back_count = 0
+                
             if not hasattr(self, "_pressed_tester_keys"):
                 self._pressed_tester_keys = set()
             self._pressed_tester_keys.add(key_name)
