@@ -79,6 +79,10 @@ def main():
         from keypad import Keypad
         keypad = Keypad()
         keypad.on_action(app.handle_keypad_action)
+        if hasattr(app, "handle_keypad_press"):
+            keypad.on_key_press(app.handle_keypad_press)
+        if hasattr(app, "handle_keypad_release"):
+            keypad.on_key_release(app.handle_keypad_release)
         keypad.start()
         print("Keypad scanner started")
     except Exception as e:

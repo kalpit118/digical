@@ -137,6 +137,7 @@ class Keypad:
         self.row_pins = row_pins or ROW_PINS
         self._callbacks = []
         self._action_callbacks = []
+        self._release_callbacks = []
         self._running = False
         self._thread = None
         self._prev_keys = set()
@@ -173,6 +174,10 @@ class Keypad:
         SHIFT_MAP action instead of their normal action.
         Multiple callbacks can be registered."""
         self._action_callbacks.append(callback)
+
+    def on_key_release(self, callback):
+        """Register a key release callback: callback(key_name: str) -> None."""
+        self._release_callbacks.append(callback)
 
     def start(self):
         """Start the scanning loop in a background daemon thread."""
@@ -250,7 +255,8 @@ class Keypad:
                             self._last_repeat_times[key] = now
             
             # Clean up released keys
-            for key in self._prev_keys - current_keys:
+            released_keys = self._prev_keys - current_keys
+            for key in released_keys:
                 self._press_times.pop(key, None)
                 self._last_repeat_times.pop(key, None)
 
@@ -284,6 +290,14 @@ class Keypad:
                                     cb(action)
                                 except Exception as e:
                                     print(f"[Keypad] Action callback error for {key_name}→{action}: {e}")
+
+            # Fire callbacks for each release
+            for key_name in sorted(released_keys):
+                for cb in self._release_callbacks:
+                    try:
+                        cb(key_name)
+                    except Exception as e:
+                        print(f"[Keypad] Release callback error for {key_name}: {e}")
 
             time.sleep(SCAN_INTERVAL_S)
 

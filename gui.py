@@ -673,6 +673,8 @@ class DigiCalGUI:
             self.show_handlers_mode()
         elif mode == "settings":
             self.show_settings_mode()
+        elif mode == "tester":
+            self.show_tester_mode()
     
     def show_calculator_mode(self):
         """Show calculator home: top=expression, middle=item list, bottom=live total"""
@@ -1712,6 +1714,7 @@ class DigiCalGUI:
             (self.tr("Customers"), "customer.png", "customers"),
             (self.tr("Products"),  "product.png", "products"),
             (self.tr("Handlers"),  "handler.png", "handlers"),
+            (self.tr("Tester"),    "settings.png", "tester"),
             (self.tr("Settings"),  "settings.png", "settings"),
         ]
 
@@ -4613,3 +4616,82 @@ class DigiCalGUI:
             return
 
         # 3. Already at Home Calculator — nothing to do
+        pass
+
+    def handle_keypad_press(self, key_name):
+        if getattr(self, "current_mode", None) == "tester" and hasattr(self, "_tester_keys"):
+            if not hasattr(self, "_pressed_tester_keys"):
+                self._pressed_tester_keys = set()
+            self._pressed_tester_keys.add(key_name)
+            
+            if key_name in self._tester_keys:
+                card, lbl = self._tester_keys[key_name]
+                card.config(bg=self.T["success"])
+                lbl.config(bg=self.T["success"], fg="#FFFFFF")
+                self._tester_status.config(text=f"Pressed: {', '.join(sorted(self._pressed_tester_keys))}")
+                self._tester_status_indicator.config(bg=self.T["success"])
+                
+    def handle_keypad_release(self, key_name):
+        if getattr(self, "current_mode", None) == "tester" and hasattr(self, "_tester_keys"):
+            if hasattr(self, "_pressed_tester_keys") and key_name in self._pressed_tester_keys:
+                self._pressed_tester_keys.remove(key_name)
+                
+            if key_name in self._tester_keys:
+                card, lbl = self._tester_keys[key_name]
+                if card.winfo_exists():
+                    card.config(bg="#1E88E5")  # Blue button
+                    lbl.config(bg="#1E88E5", fg="#FFFFFF")
+                    
+            if not getattr(self, "_pressed_tester_keys", set()):
+                self._tester_status.config(text="Ready")
+                self._tester_status_indicator.config(bg=self.T["danger"])
+            else:
+                self._tester_status.config(text=f"Pressed: {', '.join(sorted(self._pressed_tester_keys))}")
+
+    def show_tester_mode(self):
+        T = self.T
+        self.update_display("Tester - Keypad Diagnostic")
+        
+        # Status area
+        status_frame = tk.Frame(self.content_frame, bg=T["bg"])
+        status_frame.pack(fill=tk.X, pady=5)
+        
+        self._tester_status_indicator = tk.Label(status_frame, text="  ", bg=T["danger"], width=2)
+        self._tester_status_indicator.pack(side=tk.LEFT, padx=(20, 5))
+        
+        self._tester_status = tk.Label(status_frame, text="Ready", font=(config.LABEL_FONT[0], 12, "bold"), bg=T["bg"], fg=T["success"])
+        self._tester_status.pack(side=tk.LEFT)
+        
+        # Keypad Grid
+        grid_frame = tk.Frame(self.content_frame, bg=T["bg"])
+        grid_frame.pack(expand=True)
+        
+        self._tester_keys = {}
+        
+        layout = [
+            (0, 4, "R4C1"), (0, 5, "R5C1"), (0, 6, "R5C2"),
+            (1, 0, "R1C7"), (1, 1, "R1C6"), (1, 2, "R1C5"), (1, 3, "R1C4"), (1, 4, "R1C3"), (1, 5, "R1C2"), (1, 6, "R1C1"),
+            (2, 0, "R2C7"), (2, 1, "R2C6"), (2, 2, "R2C5"), (2, 3, "R2C4"), (2, 4, "R2C3"), (2, 5, "R2C2"), (2, 6, "R2C1"),
+            (3, 0, "R3C7"), (3, 1, "R3C6"), (3, 2, "R3C5"), (3, 3, "R3C4"), (3, 4, "R3C3"), (3, 5, "R3C2"), (3, 6, "R3C1"),
+            (4, 0, "R4C7"), (4, 1, "R4C6"), (4, 2, "R4C5"), (4, 3, "R4C4"), (4, 5, "R4C2"),
+            (4.5, 4, "R4C3"),
+            (5, 0, "R5C7"), (5, 1, "R5C6"), (5, 2, "R5C5"), (5, 3, "R5C4"), (5, 5, "R5C3")
+        ]
+        
+        kw = 40
+        kh = 30
+        gap = 5
+        
+        canvas = tk.Canvas(grid_frame, width=7*(kw+gap), height=6*(kh+gap), bg=T["bg"], highlightthickness=0)
+        canvas.pack()
+        
+        # Draw background and keys
+        for r, c, name in layout:
+            x = c * (kw + gap)
+            y = int(r * (kh + gap))
+            card = tk.Frame(canvas, bg="#1E88E5", width=kw, height=kh, highlightthickness=1, highlightbackground=T["shadow_dark"])
+            card.place(x=x, y=y)
+            card.pack_propagate(False)
+            lbl = tk.Label(card, text=name, bg="#1E88E5", fg="#FFFFFF", font=(config.LABEL_FONT[0], 7, "bold"))
+            lbl.pack(expand=True, fill=tk.BOTH)
+            self._tester_keys[name] = (card, lbl)
