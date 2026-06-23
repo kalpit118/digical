@@ -4675,7 +4675,7 @@ class DigiCalGUI:
         
         # Keypad Grid
         grid_frame = tk.Frame(self.content_frame, bg=T["bg"])
-        grid_frame.pack(expand=True)
+        grid_frame.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
         
         self._tester_keys = {}
         
@@ -4689,20 +4689,28 @@ class DigiCalGUI:
             (5, 0, "R5C7"), (5, 1, "R5C6"), (5, 2, "R5C5"), (5, 3, "R5C4"), (5, 5, "R5C3")
         ]
         
-        kw = 40
-        kh = 30
-        gap = 5
-        
-        canvas = tk.Canvas(grid_frame, width=7*(kw+gap), height=6*(kh+gap), bg=T["bg"], highlightthickness=0)
-        canvas.pack()
+        canvas = tk.Canvas(grid_frame, bg=T["bg"], highlightthickness=0)
+        canvas.pack(expand=True, fill=tk.BOTH)
         
         # Draw background and keys
         for r, c, name in layout:
-            x = c * (kw + gap)
-            y = int(r * (kh + gap))
-            card = tk.Frame(canvas, bg="#1E88E5", width=kw, height=kh, highlightthickness=1, highlightbackground=T["shadow_dark"])
-            card.place(x=x, y=y)
+            card = tk.Frame(canvas, bg="#1E88E5", highlightthickness=1, highlightbackground=T["shadow_dark"])
             card.pack_propagate(False)
-            lbl = tk.Label(card, text=name, bg="#1E88E5", fg="#FFFFFF", font=(config.LABEL_FONT[0], 7, "bold"))
+            lbl = tk.Label(card, text=name, bg="#1E88E5", fg="#FFFFFF", font=(config.LABEL_FONT[0], 9, "bold"))
             lbl.pack(expand=True, fill=tk.BOTH)
             self._tester_keys[name] = (card, lbl)
+            
+        def _on_resize(event):
+            w = event.width
+            h = event.height
+            if w < 20 or h < 20: return
+            gap = 4
+            kw = (w - (8 * gap)) / 7.0
+            kh = (h - (7 * gap)) / 6.0
+            for r, c, name in layout:
+                card, lbl = self._tester_keys[name]
+                x = gap + c * (kw + gap)
+                y = gap + r * (kh + gap)
+                card.place(x=int(x), y=int(y), width=int(kw), height=int(kh))
+                
+        canvas.bind("<Configure>", _on_resize)
