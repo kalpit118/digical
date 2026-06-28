@@ -3957,6 +3957,11 @@ class DigiCalGUI:
                 self._show_app_launcher()
             return
 
+        # ── Power Menu ──────────────────────────────────────────────
+        if action == "menu_hold":
+            self._show_power_menu()
+            return
+
         # ── Graph / Analytics ───────────────────────────────────────
         if action == "graph":
             if self.current_mode == "graphs":
@@ -4188,6 +4193,26 @@ class DigiCalGUI:
                     nxt_idx = (curr_idx + 1) % len(tabs) if action == "dir_right" else (curr_idx - 1) % len(tabs)
                     nb.select(tabs[nxt_idx])
                 return
+
+        # ── POWER MENU OVERRIDE ─────────────────────────────────────────────
+        if getattr(self, '_power_menu_open', False) and hasattr(self, '_power_menu_widgets'):
+            widgets = [w for w in self._power_menu_widgets if w.winfo_exists()]
+            if widgets:
+                try:
+                    curr_idx = widgets.index(focused)
+                except ValueError:
+                    widgets[0].focus_set()
+                    return
+                if action in ("dir_right", "dir_down"):
+                    widgets[(curr_idx + 1) % len(widgets)].focus_set()
+                    return
+                elif action in ("dir_left", "dir_up"):
+                    widgets[(curr_idx - 1) % len(widgets)].focus_set()
+                    return
+                elif action == "equals":
+                    if focused.winfo_class() in ("Button", "TButton"):
+                        focused.invoke()
+                    return
 
         # ── CONFIRM DIALOG OVERRIDE ─────────────────────────────────────────
         if getattr(self, '_confirm_dialog_open', False) and hasattr(self, '_confirm_widgets'):
@@ -4714,3 +4739,57 @@ class DigiCalGUI:
                 card.place(x=int(x), y=int(y), width=int(kw), height=int(kh))
                 
         canvas.bind("<Configure>", _on_resize)
+
+    def _show_power_menu(self):
+        T = self.T
+        ov, body, close = self._open_overlay(self.tr("Power Menu"))
+        
+        # Try to get temperature
+        temp_str = "Temp: N/A"
+        try:
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                temp_c = int(f.read().strip()) / 1000.0
+                temp_str = f"Raspberry Pi 3 Model B+ Temp: {temp_c:.1f}°C"
+        except Exception:
+            # Fallback for Windows/Testing
+            temp_str = "Raspberry Pi 3 Model B+ Temp: N/A (Test)"
+
+        tk.Label(body, text=temp_str, font=(config.BUTTON_FONT[0], 12, "bold"),
+                 bg=T["bg"], fg=T["accent"]).pack(pady=(8, 12))
+
+        btn_frame = tk.Frame(body, bg=T["bg"])
+        btn_frame.pack(pady=10)
+
+        import os
+        def _power_off():
+            close()
+            try:
+                os.system("sudo poweroff")
+            except Exception:
+                pass
+
+        def _restart():
+            close()
+            try:
+                os.system("sudo reboot")
+            except Exception:
+                pass
+
+        poff_btn = self._neu_btn(btn_frame, self.tr("Power Off"), command=_power_off, kind="danger", width=14, height=3)
+        poff_btn.pack(side=tk.LEFT, padx=10)
+        
+        reboot_btn = self._neu_btn(btn_frame, self.tr("Restart"), command=_restart, kind="warning", width=14, height=3)
+        reboot_btn.pack(side=tk.LEFT, padx=10)
+
+        # For up/down/left/right control, we rely on the normal overlay focus logic.
+        # But we need to define the widgets for it.
+        self._power_menu_widgets = [poff_btn, reboot_btn]
+        self._power_menu_open = True
+        
+        def _on_destroy(e):
+            if e.widget == ov:
+                self._power_menu_open = False
+        ov.bind("<Destroy>", _on_destroy, add="+")
+        
+        # Set focus
+        self.root.after(100, lambda: poff_btn.focus_set())

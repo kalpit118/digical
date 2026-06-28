@@ -143,6 +143,7 @@ class Keypad:
         self._prev_keys = set()
         self._press_times = {}
         self._last_repeat_times = {}
+        self._long_press_emitted = {}
 
         if not _HAS_GPIO:
             print("[Keypad] RPi.GPIO not available — running in stub mode.")
@@ -249,16 +250,27 @@ class Keypad:
             # Handle auto-repeat for held keys
             for key in current_keys & self._prev_keys:
                 if key in self._press_times:
-                    if now - self._press_times[key] > 0.6:  # 600ms initial delay
-                        if now - self._last_repeat_times.get(key, 0) > 0.3:  # 300ms repeat rate
-                            new_presses.add(key)
-                            self._last_repeat_times[key] = now
+                    duration = now - self._press_times[key]
+                    if duration >= 5.0 and key == "R2C7":
+                        if not self._long_press_emitted.get(key, False):
+                            self._long_press_emitted[key] = True
+                            for cb in self._action_callbacks:
+                                try:
+                                    cb("menu_hold")
+                                except Exception as e:
+                                    pass
+                    elif duration > 0.6:  # 600ms initial delay
+                        if key != "R2C7":
+                            if now - self._last_repeat_times.get(key, 0) > 0.3:  # 300ms repeat rate
+                                new_presses.add(key)
+                                self._last_repeat_times[key] = now
             
             # Clean up released keys
             released_keys = self._prev_keys - current_keys
             for key in released_keys:
                 self._press_times.pop(key, None)
                 self._last_repeat_times.pop(key, None)
+                self._long_press_emitted.pop(key, None)
 
             # Record initial press times for genuinely new presses
             for key in new_presses:
