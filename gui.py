@@ -4754,8 +4754,8 @@ class DigiCalGUI:
             # Fallback for Windows/Testing
             temp_str = "Raspberry Pi 3 Model B+ Temp: N/A (Test)"
 
-        tk.Label(body, text=temp_str, font=(config.BUTTON_FONT[0], 12, "bold"),
-                 bg=T["bg"], fg=T["accent"]).pack(pady=(8, 12))
+        tk.Label(body, text=temp_str, font=(config.BUTTON_FONT[0], 18, "bold"),
+                 bg=T["bg"], fg=T["accent"]).pack(pady=(12, 16))
 
         btn_frame = tk.Frame(body, bg=T["bg"])
         btn_frame.pack(pady=10)

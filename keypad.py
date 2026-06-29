@@ -251,7 +251,7 @@ class Keypad:
             for key in current_keys & self._prev_keys:
                 if key in self._press_times:
                     duration = now - self._press_times[key]
-                    if duration >= 5.0 and key == "R2C7":
+                    if duration >= 3.0 and key == "R2C7":
                         if not self._long_press_emitted.get(key, False):
                             self._long_press_emitted[key] = True
                             for cb in self._action_callbacks:
