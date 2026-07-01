@@ -113,7 +113,7 @@ class GraphGenerator:
             start_date = (today - timedelta(days=7)).strftime("%Y-%m-%d")
             title_period = "Weekly"
         else:
-            start_date = f"{today.year}-{today.month:02d}-01"
+            start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
             title_period = "Monthly"
         
         end_date = today.strftime("%Y-%m-%d")
