@@ -244,8 +244,11 @@ class Keypad:
                 if key not in self._prev_keys:
                     if now >= self._cooldowns.get(key, 0):
                         new_presses.add(key)
-                        # Block subsequent false triggers from switch bounce for 50ms
-                        self._cooldowns[key] = now + (DEBOUNCE_MS * 2.5 / 1000.0) 
+                        # Block subsequent false triggers from switch bounce
+                        if key in ["R2C7", "R5C4"]:
+                            self._cooldowns[key] = now + 1.0
+                        else:
+                            self._cooldowns[key] = now + (DEBOUNCE_MS * 2.5 / 1000.0) 
             
             # Handle auto-repeat for held keys
             for key in current_keys & self._prev_keys:
